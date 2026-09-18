@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #fbfaf7; --card: #fff; --line: #e8e4dc; --text: #1c1a17;
+    --muted: #8a8378; --accent: #b4651a; --mark: #fdf0c8; --markline: #e8b84b;
+    --safe-t: env(safe-area-inset-top, 0px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17181a; --card: #1f2124; --line: #2e3136; --text: #e9e6e1;
+      --muted: #8d9199; --accent: #e0a45c; --mark: #3a3117; --markline: #9a7a2e;
+    }
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.65 -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+    padding-bottom: calc(64px + var(--safe-b));
+  }
+
+  header {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--bg); border-bottom: 1px solid var(--line);
+    padding: calc(12px + var(--safe-t)) 16px 12px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  header h1 { font-size: 1.05rem; margin: 0; flex: 1; font-weight: 600; }
+  header .sub { font-size: .8rem; color: var(--muted); font-weight: 400; }
+
+  button {
+    font: inherit; color: inherit; background: none;
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 6px 10px; cursor: pointer;
+  }
+  button:active { opacity: .6; }
+  .ghost { border: none; padding: 6px; font-size: 1.2rem; }
+
+  main { padding: 12px 16px 24px; max-width: 720px; margin: 0 auto; }
+
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 16px; margin-bottom: 10px; cursor: pointer;
+  }
+  .card h3 { margin: 0 0 4px; font-size: 1rem; }
+  .card .meta { font-size: .82rem; color: var(--muted); }
+  .card .preview {
+    font-size: .88rem; color: var(--muted); margin-top: 6px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  .badge {
+    display: inline-block; font-size: .72rem; padding: 1px 7px;
+    border-radius: 999px; background: var(--mark); color: var(--accent);
+    border: 1px solid var(--markline); margin-left: 6px; vertical-align: 1px;
+  }
+
+  .note-bar {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+    font-size: .85rem; color: var(--muted);
+  }
+
+  .s {
+    display: flex; gap: 8px; align-items: flex-start;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 12px 12px 14px; margin-bottom: 8px;
+  }
+  .s .body { flex: 1; cursor: pointer; }
+  .s.on { background: var(--mark); border-color: var(--markline); }
+  .s.on .body { text-decoration: underline; text-decoration-color: var(--markline);
+                text-underline-offset: 4px; text-decoration-thickness: 2px; }
+  .s .tail { color: var(--muted); }
+
+  .note {
+    background: var(--card); border: 1px solid var(--line);
+    border-left: 3px solid var(--markline);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
+  }
+  .note .src { font-size: .78rem; color: var(--muted); margin-top: 8px;
+               display: flex; gap: 8px; align-items: center; }
+
+  .empty { color: var(--muted); text-align: center; padding: 48px 20px; font-size: .92rem; }
+
+  nav {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+    display: flex; background: var(--card); border-top: 1px solid var(--line);
+    padding-bottom: var(--safe-b);
+  }
+  nav button {
+    flex: 1; border: none; border-radius: 0; padding: 14px 0;
+    color: var(--muted); font-size: .85rem;
+  }
+  nav button.on { color: var(--accent); font-weight: 600; }
+
+  dialog {
+    border: 1px solid var(--line); border-radius: 14px; background: var(--card);
+    color: var(--text); width: min(92vw, 560px); padding: 18px;
+    max-height: 88vh; overflow: auto;
+  }
+  dialog::backdrop { background: rgba(0,0,0,.55); }
+  dialog textarea {
+    width: 100%; min-height: 120px; font: inherit; padding: 10px;
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px; resize: vertical;
+  }
+  dialog img { width: 100%; max-height: 70vh; object-fit: contain; border-radius: 8px; }
+  .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+
+  #toast {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(80px + var(--safe-b)); z-index: 50;
+    background: #222; color: #fff; padding: 9px 16px; border-radius: 999px;
+    font-size: .85rem; opacity: 0; transition: opacity .2s; pointer-events: none;
+  }
+  #toast.show { opacity: .95; }
+</style>
+</head>
+<body>
+
+<header>
+  <button class="ghost" id="back" hidden>←</button>
+  <h1 id="title">독서 노트</h1>
+  <button id="photo" hidden>원본</button>
+</header>
+
+<main id="main"><div class="empty">불러오는 중…</div></main>
+
+<nav>
+  <button id="tabBooks" class="on">책</button>
+  <button id="tabNotes">노트</button>
+</nav>
+
+<dialog id="editBox">
+  <div style="font-size:.85rem;color:var(--muted);margin-bottom:8px">문장 고치기</div>
+  <textarea id="editText"></textarea>
+  <div class="row">
+    <button onclick="document.getElementById('editBox').close()">취소</button>
+    <button id="editSave">저장</button>
+  </div>
+</dialog>
+
+<dialog id="photoBox">
+  <img id="photoImg" alt="원본 페이지 사진">
+  <div class="row"><button onclick="document.getElementById('photoBox').close()">닫기</button></div>
+</dialog>
+
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const el = (t, c, txt) => { const e = document.createElement(t); if (c) e.className = c;
+                            if (txt !== undefined) e.textContent = txt; return e; };
+
+let view = { name: 'books' };     // books | pages | page | notes
+let cur = null;                   // 현재 페이지 데이터
+
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+function call(fn, ...args) {
+  return new Promise((ok, no) => {
+    google.script.run.withSuccessHandler(ok).withFailureHandler(no)[fn](...args);
+  });
+}
+
+function loading() { $('main').innerHTML = '<div class="empty">불러오는 중…</div>'; }
+function fail(err) {
+  $('main').innerHTML = '';
+  const box = el('div', 'empty');
+  box.append('문제가 생겼습니다.', el('br'), String(err && err.message || err));
+  $('main').append(box);
+}
+
+function chrome(title, sub, showBack, showPhoto) {
+  $('title').innerHTML = title + (sub ? ' <span class="sub">' + sub + '</span>' : '');
+  $('back').hidden = !showBack;
+  $('photo').hidden = !showPhoto;
+}
+
+// ──────────── 책 목록 ────────────
+
+async function showBooks() {
+  view = { name: 'books' };
+  chrome('독서 노트', '', false, false);
+  loading();
+  try {
+    const books = await call('api_books');
+    const m = $('main'); m.innerHTML = '';
+
+    if (!books.length) {
+      m.append(el('div', 'empty', '아직 저장된 페이지가 없습니다.\n텔레그램 봇에 책 페이지를 찍어 보내주세요.'));
+      return;
+    }
+
+    books.forEach(b => {
+      const c = el('div', 'card');
+      c.append(el('h3', null, b.book),
+               el('div', 'meta', b.pages + '쪽 · 하이라이트 ' + b.notes));
+      c.onclick = () => showPages(b.book);
+      m.append(c);
+    });
+  } catch (e) { fail(e); }
+}
+
+// ──────────── 페이지 목록 ────────────
+
+async function showPages(book) {
+  view = { name: 'pages', book };
+  chrome(book, '', true, false);
+  loading();
+  try {
+    const pages = await call('api_pages', book);
+    const m = $('main'); m.innerHTML = '';
+
+    if (!pages.length) { m.append(el('div', 'empty', '이 책에 저장된 페이지가 없습니다.')); return; }
+
+    pages.forEach(p => {
+      const c = el('div', 'card');
+      const h = el('h3', null, p.page ? p.page + '쪽' : '쪽번호 미상');
+      if (p.notes) h.append(mkBadge('★ ' + p.notes));
+      if (p.stitched) h.append(mkBadge('이어짐'));
+      c.append(h,
+               el('div', 'meta', p.when.slice(5, 16) + ' · 문장 ' + p.count),
+               el('div', 'preview', p.preview));
+      c.onclick = () => showPage(p.id);
+      m.append(c);
+    });
+  } catch (e) { fail(e); }
+}
+
+function mkBadge(text) { return el('span', 'badge', text); }
+
+// ──────────── 페이지 상세 ────────────
+
+async function showPage(pageId) {
+  view = { name: 'page', id: pageId };
+  loading();
+  try {
+    cur = await call('api_page', pageId);
+    chrome(cur.book, cur.page ? cur.page + '쪽' : '쪽번호 미상', true, true);
+
+    const m = $('main'); m.innerHTML = '';
+
+    if (cur.prevTail || cur.canStitch) {
+      const bar = el('div', 'note-bar');
+      if (cur.prevTail) {
+        bar.append((cur.prevPage ? cur.prevPage + '쪽' : '앞 페이지') + ' 마지막 문장과 이어져 있습니다');
+        const b = el('button', null, '끊기');
+        b.onclick = () => setStitch(false);
+        bar.append(b);
+      } else {
+        bar.append('첫 문장이 앞 페이지에서 이어지는 것 같습니다');
+        const b = el('button', null, '이어붙이기');
+        b.onclick = () => setStitch(true);
+        bar.append(b);
+      }
+      m.append(bar);
+    }
+
+    cur.sentences.forEach(s => m.append(mkSentence(s)));
+
+    if (cur.endsMid) {
+      m.append(el('div', 'note-bar', '마지막 문장이 다음 페이지로 이어집니다'));
+    }
+  } catch (e) { fail(e); }
+}
+
+/** 첫 문장은 앞 페이지 조각을 붙여서 보여준다. 하이라이트하면 합쳐진 문장이 저장된다. */
+function fullText(s) {
+  return (s.i === 0 && cur.prevTail) ? cur.prevTail + ' ' + s.text : s.text;
+}
+
+function mkSentence(s) {
+  const row = el('div', 's' + (s.on ? ' on' : ''));
+
+  const body = el('div', 'body');
+  if (s.i === 0 && cur.prevTail) {
+    body.append(el('span', 'tail', cur.prevTail + ' '), document.createTextNode(s.text));
+  } else {
+    body.textContent = s.text;
+  }
+  body.onclick = () => toggle(s, row);
+
+  const edit = el('button', 'ghost', '✎');
+  edit.onclick = e => { e.stopPropagation(); openEdit(s); };
+
+  row.append(body, edit);
+  return row;
+}
+
+async function toggle(s, row) {
+  const wasOn = s.on;
+  s.on = !wasOn;
+  row.classList.toggle('on', s.on);   // 먼저 반응하고 나중에 저장한다
+  try {
+    const r = await call('api_toggle', cur.id, s.i, fullText(s));
+    s.on = r.on;
+    row.classList.toggle('on', r.on);
+    toast(r.on ? '노트에 담았습니다' : '노트에서 뺐습니다');
+  } catch (e) {
+    s.on = wasOn;
+    row.classList.toggle('on', wasOn);
+    toast('저장 실패: ' + (e.message || e));
+  }
+}
+
+function openEdit(s) {
+  $('editText').value = s.text;
+  $('editSave').onclick = async () => {
+    const text = $('editText').value.trim();
+    if (!text) return;
+    $('editBox').close();
+    try {
+      await call('api_edit', cur.id, s.i, text);
+      toast('고쳤습니다');
+      showPage(cur.id);
+    } catch (e) { toast('실패: ' + (e.message || e)); }
+  };
+  $('editBox').showModal();
+}
+
+async function setStitch(on) {
+  try {
+    await call('api_stitch', cur.id, on);
+    toast(on ? '이어붙였습니다' : '끊었습니다');
+    showPage(cur.id);
+  } catch (e) { toast('실패: ' + (e.message || e)); }
+}
+
+$('photo').onclick = async () => {
+  toast('원본을 불러오는 중…');
+  try {
+    $('photoImg').src = await call('api_photo', cur.id);
+    $('photoBox').showModal();
+  } catch (e) { toast(String(e.message || e)); }
+};
+
+// ──────────── 독서 노트 ────────────
+
+async function showNotes(book) {
+  view = { name: 'notes', book: book || null };
+  chrome('독서 노트', book || '전체', !!book, false);
+  loading();
+  try {
+    const notes = await call('api_notes', book || null);
+    const m = $('main'); m.innerHTML = '';
+
+    if (!notes.length) {
+      m.append(el('div', 'empty', '아직 고른 문장이 없습니다.\n책 → 페이지에서 문장을 눌러보세요.'));
+      return;
+    }
+
+    notes.forEach(n => {
+      const c = el('div', 'note');
+      c.append(el('div', null, n.text));
+
+      const src = el('div', 'src');
+      src.append(n.book + (n.page ? ' · ' + n.page + '쪽' : ''));
+
+      const go = el('button', 'ghost', '↗');
+      go.title = '원문 보기';
+      go.onclick = () => showPage(n.pageId);
+
+      const copy = el('button', 'ghost', '⧉');
+      copy.title = '복사';
+      copy.onclick = () => {
+        navigator.clipboard.writeText(n.text).then(
+          () => toast('복사했습니다'), () => toast('복사에 실패했습니다'));
+      };
+
+      src.append(go, copy);
+      c.append(src);
+      m.append(c);
+    });
+  } catch (e) { fail(e); }
+}
+
+// ──────────── 이동 ────────────
+
+$('back').onclick = () => {
+  if (view.name === 'page') showPages(cur.book);
+  else if (view.name === 'pages') showBooks();
+  else if (view.name === 'notes' && view.book) showNotes(null);
+  else showBooks();
+};
+
+$('tabBooks').onclick = () => { setTab('books'); showBooks(); };
+$('tabNotes').onclick = () => { setTab('notes'); showNotes(null); };
+
+function setTab(which) {
+  $('tabBooks').classList.toggle('on', which === 'books');
+  $('tabNotes').classList.toggle('on', which === 'notes');
+}
+
+showBooks();
+</script>
+</body>
+</html>
