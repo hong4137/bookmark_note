@@ -19,9 +19,13 @@
  * 변수 (wrangler.toml [vars]):
  *   ALLOWED_CHATS        쉼표로 구분한 텔레그램 챗 ID
  *   DRIVE_ADAPTER_URL    Apps Script 어댑터의 /exec 주소
+ *   APP_URL              배포된 Worker 주소 (봇 답장의 앱 링크)
+ *   GEMINI_MODEL         (선택) 모델 교체. 비우면 DEFAULT_MODEL
  */
 
-const GEMINI_MODEL = 'gemini-3.6-flash';
+/** 기본값. wrangler.toml 의 [vars] GEMINI_MODEL 로 덮어쓸 수 있다.
+ *  무료 등급 하루 한도는 모델마다 다르다. 3.6-flash 는 하루 20건으로 빠듯하다. */
+const DEFAULT_MODEL = 'gemini-3.6-flash';
 
 /** 쪽번호가 없을 때, 직전 사진과 이 시간 안이면 같은 흐름으로 본다 */
 const STITCH_WINDOW_MS = 10 * 60 * 1000;
@@ -219,6 +223,7 @@ async function handleUpdate(update, env) {
   const text = (msg.text || '').trim();
 
   if (text.startsWith('/책')) return cmdBook(env, chatId, text.slice(2).trim());
+  if (text.startsWith('/모델')) return cmdModel(env, chatId);
   if (text.startsWith('/표지')) return cmdCover(env, chatId, text.slice(3).trim());
   if (text.startsWith('/앱초기화')) return cmdResetApp(env, chatId);   // /앱 보다 먼저 봐야 한다
   if (text.startsWith('/앱')) return cmdApp(env, chatId);
@@ -401,6 +406,43 @@ async function cmdApp(env, chatId) {
 }
 
 /**
+ * 지금 쓰는 모델과 고를 수 있는 목록을 보여준다.
+ *
+ * 모델을 바꾸는 것은 wrangler.toml 의 [vars] 라 봇에서 바꾸지는 않는다.
+ * 목록 조회는 generateContent 한도와 별개여서, 한도를 넘긴 뒤에도 쓸 수 있다.
+ */
+async function cmdModel(env, chatId) {
+  const now = env.GEMINI_MODEL || DEFAULT_MODEL;
+
+  try {
+    const res = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=' +
+      encodeURIComponent(env.GEMINI_API_KEY));
+    const body = await res.json();
+
+    const names = (body.models || [])
+      .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
+      .map((m) => m.name.replace('models/', ''))
+      .filter((n) => /flash|lite/.test(n))   // 이 용도엔 가벼운 모델이면 충분하다
+      .slice(0, 25);
+
+    return reply(env, chatId, [
+      '지금 쓰는 모델: <b>' + esc(now) + '</b>',
+      '',
+      '가벼운 모델일수록 무료 하루 한도가 큽니다.',
+      names.map((n) => (n === now ? '• <b>' + esc(n) + '</b> ←' : '• ' + esc(n))).join('\n'),
+      '',
+      '<i>바꾸려면 wrangler.toml 의 [vars] 에</i>',
+      '<code>GEMINI_MODEL = "고른 이름"</code>',
+      '<i>을 넣고 npx wrangler deploy 하세요.</i>'
+    ].join('\n'));
+  } catch (err) {
+    return reply(env, chatId,
+      '모델 목록을 못 가져왔습니다.\n지금 쓰는 모델: <b>' + esc(now) + '</b>');
+  }
+}
+
+/**
  * 발급한 앱 링크를 전부 무효로 만든다.
  * 링크를 아는 사람은 내 밑줄을 다 읽을 수 있으므로, 흘렸다 싶으면 이걸 쓴다.
  */
@@ -420,6 +462,7 @@ const cmdHelp = (env, chatId) => reply(env, chatId, [
   '<b>/책</b> — 지금 무슨 책인지',
   '<b>/앱</b> — 밑줄 앱 열기',
   '<b>/표지 제목 - 지은이</b> — 표지를 잘못 찾았을 때 다시 찾기',
+  '<b>/모델</b> — 지금 쓰는 Gemini 모델과 고를 수 있는 목록',
   '<b>/앱초기화</b> — 발급한 앱 링크를 모두 무효로',
   '',
   '<b>표지를 찍어 보내면</b> 책이 자동으로 바뀝니다. 타이핑이 필요 없습니다.',
@@ -468,6 +511,16 @@ async function onPhoto(env, chatId, fileId, caption) {
     parsed = await parsePage(env, base64, mime);
   } catch (err) {
     console.error(err.stack || String(err));
+
+    // 하루 한도를 넘긴 것은 고장이 아니다. 무슨 일인지 사람 말로 알려준다.
+    const q = String(err.message || '').match(/^QUOTA:(\S+?):(\S+)$/);
+    if (q) {
+      return reply(env, chatId,
+        '📵 오늘 <b>' + esc(q[2]) + '</b> 무료 사용량을 다 썼습니다 (하루 ' + esc(q[1]) + '건).\n' +
+        '한국 시간 기준 <b>오후 4시</b>쯤 다시 열립니다.\n\n' +
+        '<i>한도가 더 큰 모델로 바꾸려면 <b>/모델</b> 을 보내보세요.</i>');
+    }
+
     return reply(env, chatId, '⚠️ 처리 중 문제가 생겼습니다.\n\n<code>' +
       esc(String(err.message || err)).slice(0, 700) + '</code>');
   }
@@ -676,7 +729,8 @@ const PAGE_PROMPT = [
 ].join('\n');
 
 async function parsePage(env, base64, mime) {
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL +
+  const model = env.GEMINI_MODEL || DEFAULT_MODEL;
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model +
               ':generateContent?key=' + encodeURIComponent(env.GEMINI_API_KEY);
 
   const payload = {
@@ -691,7 +745,8 @@ async function parsePage(env, base64, mime) {
     }
   };
 
-  // 과부하(503)는 흔하고 대개 몇 초면 풀린다
+  // 과부하(503)는 흔하고 대개 몇 초면 풀린다. 다만 429 는 재시도하지 않는다 —
+  // 하루 한도를 넘긴 것이라면 다시 불러봤자 남은 한도만 더 먹는다.
   const waits = [2000, 5000, 12000];
   let res;
   for (let i = 0; i <= waits.length; i++) {
@@ -700,11 +755,16 @@ async function parsePage(env, base64, mime) {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    if (res.status !== 429 && res.status < 500) break;
+    if (res.status < 500) break;
     if (i < waits.length) await sleep(waits[i]);
   }
 
   const raw = await res.text();
+
+  if (res.status === 429) {
+    const m = raw.match(/limit:\s*(\d+)/);
+    throw new Error('QUOTA:' + (m ? m[1] : '?') + ':' + model);
+  }
   if (!res.ok) throw new Error('Gemini 호출 실패 (HTTP ' + res.status + '): ' + raw.slice(0, 400));
 
   const body = JSON.parse(raw);

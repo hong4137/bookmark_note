@@ -152,6 +152,7 @@ Invoke-RestMethod "https://api.telegram.org/bot$token/setWebhook?url=$worker/tg&
 | `/책` | 지금 무슨 책인지 |
 | `/앱` | 앱 링크 발급 |
 | `/표지 제목 - 지은이` | 표지를 잘못 찾았을 때 다시 찾기 |
+| `/모델` | 지금 쓰는 Gemini 모델과 고를 수 있는 목록 |
 | 📷 **표지** 사진 | 책이 자동으로 바뀐다. 타이핑이 필요 없다 |
 | 📷 **본문** 사진 | 파싱 → 저장 → 결과 답장 |
 
@@ -207,4 +208,6 @@ npx wrangler d1 execute booknote --local \
 | 사진이 안 뜸 | 어댑터 `/exec` 를 브라우저로 열어 살아있는지. `DRIVE_SECRET` 양쪽 일치 |
 | Gemini 404 | 모델이 은퇴한 것. `src/index.js` 의 `GEMINI_MODEL` 교체 |
 | Gemini 503 | 과부하. 2·5·12초 간격으로 세 번 다시 시도한다 |
+| Gemini 429 | **무료 하루 한도**를 다 쓴 것. 재시도하지 않는다(한도만 더 먹는다).
+봇에 `/모델` 을 보내 한도가 더 큰 가벼운 모델로 바꾸거나 다음 날 기다린다 |
 | 글자를 못 읽음 | 사진 다시. 위 "잘 찍는 요령" |
