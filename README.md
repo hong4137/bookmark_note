@@ -17,15 +17,27 @@
 ```
 book-notes/
 ├── 설계.md / 설계-v2.md
-├── worker/              ← ② 본체 (Worker + D1 + 앱 화면)
+├── worker/              ← 본체 (Worker + D1 + 앱 화면)
 │   ├── wrangler.toml
 │   ├── schema.sql
 │   ├── src/index.js
 │   ├── public/          앱 화면 (index.html, app.js)
 │   └── dev-preview.mjs  D1 없이 화면만 보는 개발용 스텁
-├── drive-adapter/       ← ③ 사진을 드라이브에 넣는 얇은 조각
-└── book-bot/            ← ① v1. 데이터를 옮긴 뒤 끈다
+└── book-bot/            ← 기존 Apps Script 프로젝트
+    ├── Code.gs          v1 봇 (이전 후 트리거만 끈다)
+    ├── Setup.gs         설치 + 시트→D1 이전
+    └── Adapter.gs       사진을 드라이브에 넣는 조각 ← v2 에서 계속 쓴다
 ```
+
+## 새로 만들 것 / 그대로 쓸 것
+
+| | |
+|---|---|
+| **그대로 쓴다** | 텔레그램 봇 (같은 토큰), Gemini API 키, Apps Script 프로젝트, 드라이브 폴더, 시트 |
+| **새로 만든다** | Cloudflare Worker, D1 |
+
+봇을 새로 팔 필요도, Apps Script 프로젝트를 새로 만들 필요도 없다.
+기존 프로젝트에는 이미 드라이브 권한과 사진 폴더 id 가 있어서, 어댑터 파일 하나만 얹으면 된다.
 
 ---
 
@@ -33,26 +45,30 @@ book-notes/
 
 | | |
 |---|---|
-| 텔레그램 봇 토큰 | @BotFather → `/newbot` |
-| Gemini API 키 | <https://aistudio.google.com/apikey> |
+| 텔레그램 봇 토큰 | **기존 봇 그대로.** 새로 만들지 않는다 |
+| Gemini API 키 | **기존 키 그대로** |
 | Cloudflare 계정 | 무료. `npx wrangler login` |
+
+봇 토큰과 Gemini 키를 잊었으면 기존 Apps Script 에서
+**⚙️ 프로젝트 설정 → 스크립트 속성**을 열면 전체 값이 그대로 있다.
+(`상태확인` 은 앞 여섯 자만 찍으므로 그것으로는 알 수 없다)
 
 ---
 
 ## 설치
 
-### 1. 드라이브 어댑터 (Apps Script)
+### 1. 기존 Apps Script 에 어댑터 얹기
 
-사진만 구글 드라이브에 남기기 때문에 이 조각이 필요하다.
-Worker에는 구글 인증이 없어서 드라이브에 직접 쓸 수 없다.
+새 프로젝트를 만들지 않는다. **기존 `book-bot` 프로젝트**에 파일 하나를 추가한다.
+드라이브 권한도 사진 폴더 id 도 이미 거기 있다.
 
-1. <https://script.google.com> → 새 프로젝트 (`drive-adapter`)
-2. ⚙️ 프로젝트 설정 → `appsscript.json` 표시 체크
-3. `drive-adapter/` 의 두 파일 붙여넣기
-4. **`step1_암호_만들기`** 실행 → 로그의 `DRIVE_SECRET` 복사
+1. 기존 프로젝트 열기 → **＋ → 스크립트** → 이름 `Adapter`
+2. `book-bot/Adapter.gs` 내용 붙여넣기
+3. `appsscript.json` 도 이 저장소 것으로 교체 (웹 앱 배포 설정이 들어간다)
+4. **`v2_어댑터_암호만들기`** 실행 → 로그의 `DRIVE_SECRET` 복사
 5. 배포 → 새 배포 → **웹 앱** / 실행: **나** / 액세스: **모든 사용자**
    (Worker가 로그인 없이 불러야 한다. 대신 암호로 막는다)
-6. **`step2_저장_확인`** 실행 → 드라이브에 파일이 생기면 성공. 확인 후 지운다
+6. **`v2_어댑터_저장확인`** 실행 → 드라이브에 파일이 생기면 성공. 확인 후 지운다
 
 `/exec` 주소를 복사해 둔다.
 
@@ -94,29 +110,27 @@ npx wrangler deploy
 
 배포 주소(`https://bookmark-note.<계정>.workers.dev`)를 `wrangler.toml` 의 `APP_URL` 에 넣고 다시 `deploy`.
 
-### 5. 텔레그램 웹훅 걸기
+### 5. 기존 봇을 Worker 로 돌리기
+
+⚠️ **먼저 v1 폴링을 끈다.** 기존 Apps Script 에서 **`트리거_제거`** 실행.
+텔레그램은 봇 하나에 웹훅과 `getUpdates` 를 동시에 허용하지 않는다.
+안 끄면 둘이 메시지를 뺏는다.
+
+그 다음 같은 봇의 수신처만 Worker 로 바꾼다.
 
 ```bash
-curl "https://api.telegram.org/bot<봇토큰>/setWebhook?url=https://<배포주소>/tg&secret_token=<TELEGRAM_SECRET>"
+curl "https://api.telegram.org/bot<기존봇토큰>/setWebhook?url=https://<배포주소>/tg&secret_token=<TELEGRAM_SECRET>"
 ```
 
 `{"ok":true}` 가 나오면 된다. 봇에 `/start` 를 보내 답이 오면 연결 성공.
+**봇 주소도 대화 내용도 그대로다.** 뒤에서 일하는 쪽만 바뀐 것이다.
 
 ### 6. v1 데이터 옮기기 (v1을 쓰고 있었다면)
 
 `book-bot` 프로젝트 `Setup.gs` 의 `WORKER_URL` 과 `ADMIN_SECRET` 을 채우고
 **`v2_D1로_이전`** 실행. 여러 번 실행해도 안전하다(같은 id는 덮어쓴다).
 
-### 7. ⚠️ v1 봇 끄기
-
-```
-book-bot 프로젝트에서 `트리거_제거` 실행
-```
-
-**이걸 안 하면 둘이 서로 메시지를 뺏는다.** 텔레그램은 봇 하나에
-웹훅과 `getUpdates` 를 동시에 허용하지 않는다.
-
-### 8. 앱 열기
+### 7. 앱 열기
 
 봇에 **`/앱`** → 받은 링크를 폰에서 열고 **홈 화면에 추가**.
 링크에 접근 권한이 들어 있고, 한 번 열면 그 기기에 기억된다.
