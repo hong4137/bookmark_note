@@ -12,12 +12,12 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "booknote"
-database_id = "00000000-0000-0000-0000-000000000000"  # wrangler d1 create 후 실제 id 로 바꾸세요
+database_id = "ea2ee78e-eae9-4aae-bd60-1bbbc55920e0"  # wrangler d1 create 후 실제 id 로 바꾸세요
 
 [vars]
 # 텔레그램 챗 ID. 여러 명이면 쉼표로.
-ALLOWED_CHATS = ""
+ALLOWED_CHATS = "1406724324"
 # Apps Script 드라이브 어댑터의 /exec 주소
-DRIVE_ADAPTER_URL = ""
+DRIVE_ADAPTER_URL = "https://script.google.com/macros/s/AKfycbwAxI7pMSEKyaUl9Q79ZmYYKTpDssgSDbYs9exSPWrfkJF8m2WDRwoec_hIl9NesiIN/exec"
 # 배포된 Worker 주소 (봇 답장의 앱 링크에 쓴다)
 APP_URL = ""

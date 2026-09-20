@@ -177,7 +177,9 @@ const previousPage = (env, book, before) => env.DB
 
 function telegramHook(req, env, ctx) {
   // setWebhook 의 secret_token 이 헤더로 온다. Worker 는 헤더를 읽을 수 있다.
-  if (req.headers.get('x-telegram-bot-api-secret-token') !== env.TELEGRAM_SECRET) {
+  // 시크릿이 비어 있으면 검사가 무의미하므로 아예 받지 않는다.
+  if (!env.TELEGRAM_SECRET ||
+      req.headers.get('x-telegram-bot-api-secret-token') !== env.TELEGRAM_SECRET) {
     return new Response('no', { status: 401 });
   }
 
@@ -214,6 +216,7 @@ async function handleUpdate(update, env) {
   const text = (msg.text || '').trim();
 
   if (text.startsWith('/책')) return cmdBook(env, chatId, text.slice(2).trim());
+  if (text.startsWith('/앱초기화')) return cmdResetApp(env, chatId);   // /앱 보다 먼저 봐야 한다
   if (text.startsWith('/앱')) return cmdApp(env, chatId);
   if (text.startsWith('/start')) return cmdHelp(env, chatId);
 
@@ -268,12 +271,25 @@ async function cmdApp(env, chatId) {
     '<i>이 링크에 접근 권한이 들어 있습니다. 한 번 열면 그 기기에 기억됩니다.</i>');
 }
 
+/**
+ * 발급한 앱 링크를 전부 무효로 만든다.
+ * 링크를 아는 사람은 내 밑줄을 다 읽을 수 있으므로, 흘렸다 싶으면 이걸 쓴다.
+ */
+async function cmdResetApp(env, chatId) {
+  const res = await env.DB.prepare('DELETE FROM app_tokens').run();
+  const n = (res.meta && res.meta.changes) || 0;
+  return reply(env, chatId,
+    '🔒 앱 링크 ' + n + '개를 모두 무효로 만들었습니다.\n' +
+    '내 기기에서도 로그아웃되니 <b>/앱</b> 으로 새 링크를 받으세요.');
+}
+
 const cmdHelp = (env, chatId) => reply(env, chatId, [
   '🔖 <b>밑줄</b>',
   '',
   '<b>/책 데미안</b> — 읽는 책 정하기',
   '<b>/책</b> — 지금 무슨 책인지',
   '<b>/앱</b> — 밑줄 앱 열기',
+  '<b>/앱초기화</b> — 발급한 앱 링크를 모두 무효로',
   '',
   '책을 정한 뒤 페이지 사진을 보내면 문장 단위로 저장합니다.',
   '펼친 양면으로 찍으면 문장이 잘리지 않아 더 깔끔합니다.'
@@ -507,6 +523,11 @@ async function parsePage(env, base64, mime) {
 
 /** book-bot 의 `이전_D1로_보내기` 가 부른다. 한 번 쓰고 잊는 창구다. */
 async function adminImport(req, env) {
+  // 시크릿을 지우면 env.ADMIN_SECRET 이 undefined 가 된다. 그때 빈 본문을 보내면
+  // undefined === undefined 로 통과해버리므로, 설정 여부부터 확인한다.
+  // 이전이 끝난 뒤 시크릿을 지우는 것이 곧 이 창구를 영구히 닫는 방법이다.
+  if (!env.ADMIN_SECRET) return json({ error: 'disabled' }, 404);
+
   const body = await req.json();
   if (body.secret !== env.ADMIN_SECRET) return json({ error: 'unauthorized' }, 401);
 
