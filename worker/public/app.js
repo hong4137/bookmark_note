@@ -1,5 +1,5 @@
 /**
- * 독서 노트 앱 — 화면.
+ * 밑줄 — 화면.
  *
  * v1이 느렸던 진짜 이유는 화면을 옮길 때마다 서버를 부르고, 부를 때마다
  * 시트 전체를 읽은 것이었다. 여기서는 **처음 한 번에 전부 받아 들고 있고**,
@@ -49,9 +49,8 @@ async function api(path, body) {
 
 /** { pages: [...], notes: [...] } — 첫 로딩에 통째로 받는다 */
 let db = { pages: [], notes: [] };
-let noteFilter = null;   // 노트 화면에서 고른 책
+let noteFilter = null;   // 밑줄 화면에서 고른 책
 let view = { name: 'books' };
-let back = false;        // 직전 이동이 '뒤로'였나 (전환 방향)
 
 const byId = (id) => db.pages.find((p) => p.id === id);
 const notesOf = (pageId) => db.notes.filter((n) => n.page_id === pageId);
@@ -97,7 +96,7 @@ function chrome({ crumb, title, sub, showBack, showPhoto }) {
   $('crumb').hidden = !crumb;
   $('title').innerHTML = '';
   $('title').append(title);
-  if (sub) { const s = el('small', null, sub); $('title').append(s); }
+  if (sub) $('title').append(el('small', null, sub));
   $('back').hidden = !showBack;
   $('photo').hidden = !showPhoto;
 }
@@ -105,14 +104,19 @@ function chrome({ crumb, title, sub, showBack, showPhoto }) {
 function render(node) {
   const m = $('main');
   m.innerHTML = '';
-  const wrap = el('div', 'view' + (back ? ' back' : ''));
+  const wrap = el('div', 'view');
   wrap.append(node);
   m.append(wrap);
-  back = false;
   scrollTo({ top: 0 });
 }
 
-function skeleton(rows = 5) {
+function empty(mark, text) {
+  const box = el('div', 'empty');
+  box.append(el('b', null, mark), text);
+  return box;
+}
+
+function skeleton(rows = 4) {
   const f = document.createDocumentFragment();
   for (let i = 0; i < rows; i++) {
     const s = el('div', 'skel');
@@ -125,34 +129,32 @@ function skeleton(rows = 5) {
 function fmtDate(iso) {
   const d = new Date(iso);
   if (isNaN(d)) return '';
-  const now = new Date();
-  const sameYear = d.getFullYear() === now.getFullYear();
-  const md = (d.getMonth() + 1) + '월 ' + d.getDate() + '일';
-  return sameYear ? md : d.getFullYear() + '년 ' + md;
+  return (d.getMonth() + 1) + '.' + d.getDate() + '.';
 }
 
 // ──────────────────────── 책 목록 ────────────────────────
 
 function showBooks() {
   view = { name: 'books' };
-  chrome({ title: '독서 노트', showBack: false, showPhoto: false });
+  chrome({ title: '밑줄', showBack: false, showPhoto: false });
   setTab('books');
 
   const list = books();
   if (!list.length) {
-    render(el('div', 'empty', '아직 저장된 페이지가 없습니다.\n텔레그램 봇에 책 페이지를 찍어 보내주세요.'));
+    render(empty('✎', '아직 모은 문장이 없습니다.\n텔레그램 봇에 책 페이지를 찍어 보내주세요.'));
     return;
   }
 
-  const box = el('div', 'list');
+  const box = el('div');
   for (const b of list) {
-    const row = el('div', 'item');
-    const t = el('div', 't');
-    t.append(b.book);
-    t.append(el('span', 'sub', b.pages + '쪽 기록 · 밑줄 ' + b.notes + '개'));
-    row.append(t, el('span', 'chev', '›'));
-    row.onclick = () => showPages(b.book);
-    box.append(row);
+    const card = el('div', 'card');
+    const h = el('div', 'h');
+    h.append(el('b', null, b.book), el('span', 'sp'));
+    if (b.notes) h.append(el('span', 'count', b.notes));
+    card.append(h, el('div', 'sub',
+      b.pages + '쪽 기록' + (b.notes ? ' · 밑줄 ' + b.notes + '개' : '')));
+    card.onclick = () => showPages(b.book);
+    box.append(card);
   }
   render(box);
 }
@@ -164,18 +166,26 @@ function showPages(book) {
   chrome({ crumb: '책', title: book, showBack: true, showPhoto: false });
   setTab('books');
 
-  const box = el('div', 'list');
-  for (const p of pagesOf(book)) {
-    const row = el('div', 'item');
-    const t = el('div', 't');
-    t.append(p.page ? p.page + '쪽' : '쪽번호 미상');
-    if (p.prev_id) t.append(el('span', 'tag', '이어짐'));
-    t.append(el('span', 'sub', p.sentences[0] || '(빈 페이지)'));
+  const pages = pagesOf(book);
+  if (!pages.length) {
+    render(empty('✎', '이 책에 저장된 페이지가 없습니다.'));
+    return;
+  }
+
+  const box = el('div');
+  for (const p of pages) {
+    const card = el('div', 'card');
+    const h = el('div', 'h');
+    h.append(el('b', null, p.page ? p.page + '쪽' : '쪽번호 미상'));
+    if (p.prev_id) h.append(el('span', 'pill', '이어짐'));
+    h.append(el('span', 'sp'));
 
     const n = notesOf(p.id).length;
-    row.append(t, el('span', 'n', n ? '밑줄 ' + n : ''), el('span', 'chev', '›'));
-    row.onclick = () => showPage(p.id);
-    box.append(row);
+    if (n) h.append(el('span', 'count', n));
+
+    card.append(h, el('div', 'sub', p.sentences[0] || '(빈 페이지)'));
+    card.onclick = () => showPage(p.id);
+    box.append(card);
   }
   render(box);
 }
@@ -197,31 +207,33 @@ function showPage(pageId) {
   setTab('books');
 
   const box = el('div');
+  const sheet = el('div', 'sheet-card');
   const tail = prevTailOf(p);
 
   if (tail || p.starts_mid) {
     const hint = el('div', 'hint');
     if (tail) {
       const prev = byId(p.prev_id);
-      hint.append((prev && prev.page ? prev.page + '쪽' : '앞 페이지') + ' 마지막 문장과 이어져 있습니다');
+      hint.append((prev && prev.page ? prev.page + '쪽' : '앞 페이지') + '에서 이어짐');
       const b = el('button', 'txtbtn', '끊기');
       b.onclick = () => stitch(p, false);
       hint.append(b);
     } else {
-      hint.append('첫 문장이 앞 페이지에서 이어지는 것 같습니다');
+      hint.append('앞 페이지에서 이어지는 것 같습니다');
       const b = el('button', 'txtbtn', '이어붙이기');
       b.onclick = () => stitch(p, true);
       hint.append(b);
     }
-    box.append(hint);
+    sheet.append(hint);
   }
 
   const marked = new Set(notesOf(pageId).map((n) => n.idx));
-  p.sentences.forEach((text, i) => box.append(sentenceRow(p, i, text, marked.has(i), tail)));
+  p.sentences.forEach((text, i) => sheet.append(sentenceRow(p, i, text, marked.has(i), tail)));
+  box.append(sheet);
 
   if (p.ends_mid) {
     const h = el('div', 'hint');
-    h.style.borderBottom = 'none';
+    h.style.padding = '0 4px 4px';
     h.append('마지막 문장이 다음 페이지로 이어집니다');
     box.append(h);
   }
@@ -233,11 +245,13 @@ function sentenceRow(page, i, text, on, tail) {
   const row = el('div', 's' + (on ? ' on' : ''));
 
   const body = el('div', 'body');
+  const ink = el('span', 'ink');
   if (i === 0 && tail) {
-    body.append(el('span', 'tail', tail + ' '), document.createTextNode(text));
+    ink.append(el('span', 'tail', tail + ' '), document.createTextNode(text));
   } else {
-    body.textContent = text;
+    ink.textContent = text;
   }
+  body.append(ink);
   body.onclick = () => toggle(page, i, row);
 
   const pen = el('button', 'pen', '✎');
@@ -248,19 +262,20 @@ function sentenceRow(page, i, text, on, tail) {
   return row;
 }
 
-/** 하이라이트 = 노트 저장. 화면을 먼저 바꾸고 서버로 보낸다. */
+/** 밑줄 = 노트 저장. 화면을 먼저 바꾸고 서버로 보낸다. */
 async function toggle(page, i, row) {
   const tail = prevTailOf(page);
   const full = (i === 0 && tail) ? tail + ' ' + page.sentences[i] : page.sentences[i];
   const had = notesOf(page.id).some((n) => n.idx === i);
 
+  const add = () => db.notes.push({
+    id: 'tmp', page_id: page.id, book: page.book, page: page.page,
+    idx: i, text: full, saved_at: new Date().toISOString()
+  });
+  const drop = () => { db.notes = db.notes.filter((n) => !(n.page_id === page.id && n.idx === i)); };
+
   row.classList.toggle('on', !had);
-  if (had) {
-    db.notes = db.notes.filter((n) => !(n.page_id === page.id && n.idx === i));
-  } else {
-    db.notes.push({ id: 'tmp', page_id: page.id, book: page.book, page: page.page,
-                    idx: i, text: full, saved_at: new Date().toISOString() });
-  }
+  had ? drop() : add();
 
   try {
     const r = await api('/notes/toggle', { page_id: page.id, idx: i, text: full });
@@ -271,12 +286,7 @@ async function toggle(page, i, row) {
     toast(r.on ? '밑줄을 그었습니다' : '밑줄을 지웠습니다');
   } catch (err) {
     row.classList.toggle('on', had);   // 되돌린다
-    if (had) {
-      db.notes.push({ id: 'tmp', page_id: page.id, book: page.book, page: page.page,
-                      idx: i, text: full, saved_at: new Date().toISOString() });
-    } else {
-      db.notes = db.notes.filter((n) => !(n.page_id === page.id && n.idx === i));
-    }
+    had ? add() : drop();
     toast('저장하지 못했습니다');
   }
 }
@@ -329,7 +339,7 @@ $('photo').onclick = () => {
   $('photoBox').showModal();
 };
 
-// ──────────────────────── 노트 ────────────────────────
+// ──────────────────────── 밑줄 ────────────────────────
 
 function showNotes() {
   view = { name: 'notes' };
@@ -337,7 +347,7 @@ function showNotes() {
   setTab('notes');
 
   if (!db.notes.length) {
-    render(el('div', 'empty', '아직 그은 밑줄이 없습니다.\n페이지를 열어 마음에 드는 문장을 눌러보세요.'));
+    render(empty('✎', '아직 그은 밑줄이 없습니다.\n페이지를 열어 마음에 드는 문장을 눌러보세요.'));
     return;
   }
 
@@ -364,7 +374,9 @@ function showNotes() {
   let lastBook = null;
   for (const n of shown) {
     if (n.book !== lastBook) {
-      box.append(el('div', 'group-h', n.book));
+      const h = el('div', 'group-h');
+      h.append(el('i', null, n.book));
+      box.append(h);
       lastBook = n.book;
     }
     box.append(quoteRow(n));
@@ -380,7 +392,7 @@ function quoteRow(n) {
   src.append(el('span', 'grow', n.page ? n.page + '쪽' : '쪽번호 미상'));
 
   const go = el('button', 'txtbtn', '원문');
-  go.onclick = () => { back = false; showPage(n.page_id); };
+  go.onclick = () => showPage(n.page_id);
 
   const copy = el('button', 'txtbtn', '복사');
   copy.onclick = async () => {
@@ -401,7 +413,6 @@ function setTab(which) {
 }
 
 $('back').onclick = () => {
-  back = true;
   if (view.name === 'page') {
     const p = byId(view.id);
     p ? showPages(p.book) : showBooks();
@@ -410,21 +421,17 @@ $('back').onclick = () => {
   }
 };
 
-$('tabBooks').onclick = () => { back = false; showBooks(); };
-$('tabNotes').onclick = () => { back = false; noteFilter = null; showNotes(); };
-
-addEventListener('scroll', () => {
-  $('hd').classList.toggle('scrolled', scrollY > 4);
-}, { passive: true });
+$('tabBooks').onclick = () => showBooks();
+$('tabNotes').onclick = () => { noteFilter = null; showNotes(); };
 
 // ──────────────────────── 시작 ────────────────────────
 
 async function boot() {
-  chrome({ title: '독서 노트', showBack: false, showPhoto: false });
+  chrome({ title: '밑줄', showBack: false, showPhoto: false });
   render(skeleton());
 
   if (!token) {
-    render(el('div', 'empty', '접근 권한이 없습니다.\n텔레그램 봇에서 /앱 을 보내\n받은 링크로 열어주세요.'));
+    render(empty('🔒', '접근 권한이 없습니다.\n텔레그램 봇에서 /앱 을 보내\n받은 링크로 열어주세요.'));
     return;
   }
 
@@ -434,9 +441,9 @@ async function boot() {
   } catch (err) {
     if (String(err.message) === 'UNAUTHORIZED') {
       try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
-      render(el('div', 'empty', '링크가 만료되었습니다.\n텔레그램 봇에서 /앱 을 다시 보내주세요.'));
+      render(empty('🔒', '링크가 만료되었습니다.\n텔레그램 봇에서 /앱 을 다시 보내주세요.'));
     } else {
-      render(el('div', 'empty', '불러오지 못했습니다.\n' + String(err.message || err)));
+      render(empty('⚠', '불러오지 못했습니다.\n' + String(err.message || err)));
     }
   }
 }

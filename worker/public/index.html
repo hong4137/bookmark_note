@@ -3,262 +3,286 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#faf6ee" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#14130f" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#fffbf0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1b1916" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="독서 노트">
-<title>독서 노트</title>
+<meta name="apple-mobile-web-app-title" content="밑줄">
+<title>밑줄</title>
 
-<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@700&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css" rel="stylesheet">
 
 <style>
 /* ────────────────────────────────────────────────────────────
-   종이·활자. 읽기 위한 도구라 화면도 읽기 쪽으로 기울인다.
-   순백·순흑을 피하고, 테두리보다 여백과 얇은 선으로 나눈다.
+   형광펜 책상.
+   파스텔 색면이 번진 바탕 + 모눈 노트 격자 위에, 검은 테두리와
+   각진 그림자를 가진 카드가 툭 놓인다. 강조는 배경색이 아니라
+   글자 아래에 그은 형광펜 자국이다.
+
+   한글은 화면에서 명조보다 고딕이 읽기 편하다(네이버 모바일 본문 연구).
+   본문까지 전부 고딕(Pretendard)으로 가고, 손글씨체는 숫자·단위에만 쓴다.
    ──────────────────────────────────────────────────────────── */
 :root {
   color-scheme: light dark;
-  --paper:   #faf6ee;   /* 바탕 — 살짝 누런 종이 */
-  --raised:  #fffdf8;   /* 떠 있는 면 */
-  --ink:     #24211c;   /* 본문 */
-  --ink-2:   #56504608; /* (미사용 자리표시) */
-  --faint:   #8b8275;   /* 보조 글자 */
-  --rule:    #e6ded0;   /* 구분선 */
-  --accent:  #9a5b2b;   /* 강조 — 바랜 주홍 */
-  --mark:    #f3e7cd66; /* 하이라이트 바탕 */
-  --markrule:#c99a4e;   /* 하이라이트 밑줄 */
-  --serif:   'Noto Serif KR', 'Nanum Myeongjo', 'Apple SD Gothic Neo', 'Malgun Gothic', serif;
-  --sans:    -apple-system, 'Segoe UI', 'Malgun Gothic', sans-serif;
+  --ink:     #241f1a;   /* 테두리·글자 — 이 색이 이 디자인의 중심이다 */
+  --paper:   #fffbf0;
+  --card:    #ffffff;
+  --faint:   #8a8073;
+  --line:    #ece5d6;
+  --accent:  #e2703a;
+  --mint:    #a8e6cf;
+  --marker:  #ffe45e;
+  --grid:    #e6ddc8;
+  --blob-1:  #ffe08a;
+  --blob-2:  #a8e6cf;
+  --blob-3:  #ffc4c4;
+  --shadow:  var(--ink);
   --safe-t:  env(safe-area-inset-top, 0px);
   --safe-b:  env(safe-area-inset-bottom, 0px);
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --paper:  #14130f;
-    --raised: #1c1a15;
-    --ink:    #e6e0d4;
-    --faint:  #8d857a;
-    --rule:   #2c2921;
-    --accent: #d99a5e;
-    --mark:   #3a301b66;
-    --markrule:#8a6b34;
+    --ink:    #f0e7d6;
+    --paper:  #1b1916;
+    --card:   #262320;
+    --faint:  #9c9283;
+    --line:   #34302a;
+    --accent: #ff9260;
+    --mint:   #3d6b5b;
+    --marker: #8a7520;
+    --grid:   #2a2722;
+    --blob-1: #4a3d1c;
+    --blob-2: #24463b;
+    --blob-3: #4a2b2b;
+    --shadow: #000;
   }
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-/* display 를 지정한 클래스가 [hidden] 을 이기므로 못박아 둔다 */
 [hidden] { display: none !important; }
 html, body { overscroll-behavior-y: none; }
+
 body {
-  margin: 0; background: var(--paper); color: var(--ink);
-  font-family: var(--sans); font-size: 16px; line-height: 1.6;
+  margin: 0; color: var(--ink);
+  font-family: Pretendard, -apple-system, 'Segoe UI', 'Malgun Gothic', sans-serif;
+  font-size: 16px; line-height: 1.6; font-weight: 500;
   -webkit-font-smoothing: antialiased;
+  background:
+    radial-gradient(58% 26% at 92% 2%,  var(--blob-1) 0%, transparent 60%),
+    radial-gradient(50% 24% at 2% 18%,  var(--blob-2) 0%, transparent 62%),
+    radial-gradient(56% 28% at 98% 62%, var(--blob-3) 0%, transparent 62%),
+    var(--paper);
+  background-attachment: fixed;
 }
+/* 모눈 노트 격자 */
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: .5;
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+header, main, nav, #toast { position: relative; z-index: 1; }
 
 /* ── 헤더 ─────────────────────────────────────────────── */
-header {
-  position: sticky; top: 0; z-index: 20;
-  padding: calc(10px + var(--safe-t)) 20px 10px;
-  background: color-mix(in srgb, var(--paper) 88%, transparent);
-  backdrop-filter: saturate(1.6) blur(14px);
-  -webkit-backdrop-filter: saturate(1.6) blur(14px);
-  border-bottom: 1px solid transparent;
-  transition: border-color .2s;
-}
-header.scrolled { border-bottom-color: var(--rule); }
-.bar { display: flex; align-items: center; gap: 4px; min-height: 30px; }
+header { padding: calc(14px + var(--safe-t)) 18px 8px; }
+.bar { display: flex; align-items: flex-start; gap: 8px; }
 .bar .grow { flex: 1; min-width: 0; }
 
 .crumb {
-  font-size: .78rem; color: var(--faint); letter-spacing: .02em;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-h1 {
-  font-family: var(--serif); font-weight: 600;
-  font-size: 1.5rem; line-height: 1.25; margin: 2px 0 0;
-  letter-spacing: -.01em;
-}
-h1 small { font-family: var(--sans); font-weight: 400; font-size: .8rem; color: var(--faint); margin-left: 7px; }
-
-.icon {
-  appearance: none; border: 0; background: none; color: var(--ink);
-  width: 34px; height: 34px; border-radius: 10px; flex: none;
-  display: grid; place-items: center; font-size: 1.15rem; cursor: pointer;
-}
-.icon:active { background: var(--rule); }
-.txtbtn {
-  appearance: none; border: 0; background: none; cursor: pointer;
-  color: var(--accent); font: inherit; font-size: .85rem; padding: 6px 4px;
-}
-
-/* ── 본문 영역 ─────────────────────────────────────────── */
-main {
-  max-width: 680px; margin: 0 auto;
-  padding: 6px 20px calc(96px + var(--safe-b));
-}
-.view { animation: slide .22s cubic-bezier(.2,.7,.3,1); }
-.view.back { animation-name: slideBack; }
-@keyframes slide     { from { opacity: 0; transform: translateX(14px); } }
-@keyframes slideBack { from { opacity: 0; transform: translateX(-14px); } }
-@media (prefers-reduced-motion: reduce) { .view { animation: none; } }
-
-/* ── 목록 (카드 대신 얇은 선) ───────────────────────────── */
-.list { margin-top: 4px; }
-.item {
-  display: flex; align-items: baseline; gap: 12px;
-  padding: 15px 2px; border-bottom: 1px solid var(--rule); cursor: pointer;
-}
-.item:active { background: var(--raised); }
-.item .t { font-family: var(--serif); font-size: 1.06rem; flex: 1; min-width: 0; }
-.item .t .sub {
-  display: block; font-family: var(--sans); font-size: .82rem;
-  color: var(--faint); margin-top: 3px;
+  display: inline-block; background: var(--ink); color: var(--paper);
+  font-size: 12px; font-weight: 700; padding: 5px 12px; border-radius: 999px;
+  transform: rotate(-1.6deg); max-width: 100%;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.item .n { font-size: .8rem; color: var(--faint); flex: none; font-variant-numeric: tabular-nums; }
-.item .chev { color: var(--rule); flex: none; font-size: .9rem; }
-
-.tag {
-  display: inline-block; font-size: .7rem; padding: 1px 6px; border-radius: 4px;
-  background: var(--mark); color: var(--accent); margin-left: 6px;
-  border: 1px solid var(--markrule); vertical-align: 2px;
+h1 {
+  font-size: 34px; font-weight: 800; letter-spacing: -.03em;
+  line-height: 1.1; margin: 10px 0 0;
 }
+h1 small {
+  font-family: Gaegu, Pretendard, cursive; font-size: 20px; font-weight: 700;
+  color: var(--accent); margin-left: 7px; letter-spacing: 0;
+}
+
+.icon {
+  appearance: none; background: var(--card); color: var(--ink);
+  border: 2px solid var(--ink); border-radius: 12px; cursor: pointer;
+  width: 38px; height: 38px; flex: none; display: grid; place-items: center;
+  font-size: 1.1rem; box-shadow: 3px 3px 0 var(--shadow); margin-top: 2px;
+}
+.icon:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--shadow); }
+.txtbtn {
+  appearance: none; border: 0; background: none; cursor: pointer;
+  color: var(--accent); font: inherit; font-size: 13px; font-weight: 700; padding: 5px 2px;
+}
+
+/* ── 본문 ─────────────────────────────────────────────── */
+main {
+  max-width: 660px; margin: 0 auto;
+  padding: 10px 14px calc(104px + var(--safe-b));
+}
+.view { animation: pop .24s cubic-bezier(.2,.8,.3,1); }
+@keyframes pop { from { opacity: 0; transform: translateY(10px) scale(.99); } }
+@media (prefers-reduced-motion: reduce) { .view { animation: none; } }
+
+/* ── 카드 ─────────────────────────────────────────────── */
+.card {
+  background: var(--card); border: 2px solid var(--ink); border-radius: 18px;
+  box-shadow: 5px 6px 0 var(--shadow); padding: 16px 16px 15px; margin-bottom: 14px;
+  cursor: pointer;
+}
+.card:nth-child(odd)  { transform: rotate(-.45deg); }
+.card:nth-child(even) { transform: rotate(.5deg); }
+.card:active { transform: translate(3px, 3px); box-shadow: 2px 3px 0 var(--shadow); }
+.card .h { display: flex; align-items: center; gap: 8px; }
+.card .h b { font-size: 17px; font-weight: 800; letter-spacing: -.02em; }
+.card .h .sp { flex: 1; }
+.card .sub {
+  font-size: 13px; color: var(--faint); font-weight: 600; margin-top: 7px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.count { font-family: Gaegu, cursive; font-size: 17px; color: var(--accent); }
+
+.pill {
+  font-size: 11.5px; font-weight: 700; padding: 2px 9px; border-radius: 999px;
+  border: 1.5px solid var(--ink); background: var(--mint); color: var(--ink);
+}
+.pill.y { background: var(--marker); }
 
 /* ── 문장 ─────────────────────────────────────────────── */
+.sheet-card {
+  background: var(--card); border: 2px solid var(--ink); border-radius: 18px;
+  box-shadow: 5px 6px 0 var(--shadow); padding: 14px 16px 6px; margin-bottom: 16px;
+}
 .hint {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  font-size: .8rem; color: var(--faint);
-  padding: 10px 0 14px; border-bottom: 1px solid var(--rule); margin-bottom: 6px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-size: 12.5px; font-weight: 600; color: var(--faint); padding: 2px 0 10px;
 }
-.s { position: relative; padding: 14px 34px 14px 2px; border-bottom: 1px solid var(--rule); }
-.s .body {
-  font-family: var(--serif); font-size: 1.08rem; line-height: 1.85;
-  cursor: pointer; word-break: keep-all; transition: color .15s;
+.s { position: relative; padding: 11px 30px 11px 0; }
+.s + .s { border-top: 1.5px dashed var(--line); }
+.s .body { cursor: pointer; font-size: 15.5px; line-height: 1.92; word-break: keep-all; }
+.s .ink { box-decoration-break: clone; -webkit-box-decoration-break: clone; padding: 0 1px; }
+.s.on .ink {
+  background: linear-gradient(transparent 50%, var(--marker) 50% 93%, transparent 93%);
 }
-.s.on { background: var(--mark); box-shadow: inset 3px 0 0 var(--markrule); }
-.s.on .body {
-  text-decoration: underline; text-decoration-color: var(--markrule);
-  text-underline-offset: 6px; text-decoration-thickness: 1.5px;
-}
-.s .tail { color: var(--faint); }
+.s .tail { color: color-mix(in srgb, var(--faint) 70%, transparent); }
 .s .pen {
-  position: absolute; top: 12px; right: 0;
-  opacity: 0; transition: opacity .15s;
+  position: absolute; top: 9px; right: -4px; opacity: .4;
   appearance: none; border: 0; background: none; cursor: pointer;
-  color: var(--faint); font-size: .95rem; padding: 4px 6px;
+  color: var(--faint); font-size: 15px; padding: 4px 6px;
 }
 .s:hover .pen, .s.on .pen { opacity: 1; }
-@media (hover: none) { .s .pen { opacity: .45; } }
 
-/* ── 노트 ─────────────────────────────────────────────── */
-.group-h {
-  font-family: var(--serif); font-size: .92rem; color: var(--faint);
-  padding: 20px 0 8px; position: sticky; top: calc(58px + var(--safe-t));
-  background: var(--paper); z-index: 5;
+/* ── 밑줄(노트) ───────────────────────────────────────── */
+.chips { display: flex; gap: 7px; overflow-x: auto; padding: 2px 2px 14px; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip {
+  appearance: none; cursor: pointer; white-space: nowrap; font: inherit;
+  font-size: 13px; font-weight: 700; padding: 6px 14px; border-radius: 999px;
+  border: 2px solid var(--ink); background: var(--card); color: var(--ink);
+  box-shadow: 2px 3px 0 var(--shadow);
 }
-.quote { padding: 14px 0 16px; border-bottom: 1px solid var(--rule); }
-.quote .q {
-  font-family: var(--serif); font-size: 1.06rem; line-height: 1.85;
-  word-break: keep-all;
-  border-left: 2px solid var(--markrule); padding-left: 14px;
+.chip.on { background: var(--ink); color: var(--paper); }
+.chip:active { transform: translate(2px, 2px); box-shadow: 0 1px 0 var(--shadow); }
+
+.group-h { font-size: 15px; font-weight: 800; margin: 20px 2px 10px; display: flex; align-items: center; gap: 8px; }
+.group-h i { font-style: normal; }
+
+.quote {
+  background: var(--card); border: 2px solid var(--ink); border-radius: 16px;
+  box-shadow: 4px 5px 0 var(--shadow); padding: 15px 16px; margin-bottom: 13px;
 }
+.quote:nth-of-type(odd)  { transform: rotate(-.5deg); }
+.quote:nth-of-type(even) { transform: rotate(.55deg); }
+.quote .q { font-size: 15px; line-height: 1.88; word-break: keep-all; }
 .quote .src {
-  display: flex; align-items: center; gap: 4px;
-  font-size: .78rem; color: var(--faint); margin-top: 10px; padding-left: 16px;
+  display: flex; align-items: center; gap: 8px; margin-top: 12px;
+  font-size: 12px; font-weight: 700; color: var(--faint);
 }
 .quote .src .grow { flex: 1; }
 
-/* ── 필터 칩 ──────────────────────────────────────────── */
-.chips { display: flex; gap: 7px; overflow-x: auto; padding: 2px 0 12px; scrollbar-width: none; }
-.chips::-webkit-scrollbar { display: none; }
-.chip {
-  appearance: none; cursor: pointer; white-space: nowrap;
-  font: inherit; font-size: .82rem; padding: 6px 13px; border-radius: 999px;
-  border: 1px solid var(--rule); background: none; color: var(--faint);
-}
-.chip.on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
-
-/* ── 빈 화면 ──────────────────────────────────────────── */
+/* ── 빈 화면 · 뼈대 ───────────────────────────────────── */
 .empty {
-  text-align: center; color: var(--faint); padding: 72px 24px;
-  font-family: var(--serif); line-height: 1.9; white-space: pre-line;
+  text-align: center; color: var(--faint); font-weight: 600;
+  padding: 70px 22px; line-height: 1.9; white-space: pre-line;
 }
-.skel { padding: 15px 2px; border-bottom: 1px solid var(--rule); }
+.empty b { display: block; font-size: 42px; margin-bottom: 10px; }
+.skel {
+  background: var(--card); border: 2px solid var(--line); border-radius: 18px;
+  padding: 18px 16px; margin-bottom: 14px;
+}
 .skel i {
-  display: block; height: 13px; border-radius: 4px; background: var(--rule);
+  display: block; height: 13px; border-radius: 999px; background: var(--line);
   animation: pulse 1.3s ease-in-out infinite;
 }
-.skel i + i { margin-top: 9px; width: 55%; }
-@keyframes pulse { 50% { opacity: .45; } }
+.skel i + i { margin-top: 10px; width: 58%; }
+@keyframes pulse { 50% { opacity: .4; } }
 
 /* ── 하단 탭 ──────────────────────────────────────────── */
 nav {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
-  display: flex; justify-content: center; gap: 4px;
-  padding: 6px 12px calc(6px + var(--safe-b));
-  background: color-mix(in srgb, var(--paper) 88%, transparent);
-  backdrop-filter: saturate(1.6) blur(14px);
-  -webkit-backdrop-filter: saturate(1.6) blur(14px);
-  border-top: 1px solid var(--rule);
+  position: fixed; left: 50%; translate: -50% 0; z-index: 20;
+  bottom: calc(14px + var(--safe-b));
+  display: flex; gap: 4px; padding: 5px;
+  background: var(--card); border: 2px solid var(--ink); border-radius: 999px;
+  box-shadow: 4px 5px 0 var(--shadow);
 }
 nav button {
-  appearance: none; border: 0; background: none; cursor: pointer;
-  flex: 1; max-width: 200px; padding: 9px 0 7px; border-radius: 12px;
-  color: var(--faint); font: inherit; font-size: .72rem; line-height: 1.3;
+  appearance: none; border: 0; cursor: pointer; background: none;
+  font: inherit; font-size: 13px; font-weight: 700; color: var(--faint);
+  padding: 9px 22px; border-radius: 999px;
 }
-nav button .ic { display: block; font-size: 1.05rem; margin-bottom: 2px; }
-nav button.on { color: var(--accent); }
+nav button.on { background: var(--ink); color: var(--paper); }
 
-/* ── 시트(수정·사진) ──────────────────────────────────── */
+/* ── 시트 ─────────────────────────────────────────────── */
 dialog {
   border: 0; padding: 0; background: none; width: 100%; max-width: none;
   margin: 0; margin-top: auto; max-height: 100dvh;
 }
-dialog::backdrop { background: rgba(20,17,12,.5); backdrop-filter: blur(2px); }
+dialog::backdrop { background: rgba(36,31,26,.5); }
 .sheet {
-  background: var(--raised); color: var(--ink);
-  border-radius: 20px 20px 0 0; padding: 18px 20px calc(18px + var(--safe-b));
-  max-width: 680px; margin: 0 auto;
-  animation: up .25s cubic-bezier(.2,.8,.3,1);
+  background: var(--card); color: var(--ink);
+  border: 2px solid var(--ink); border-bottom: 0;
+  border-radius: 22px 22px 0 0; padding: 18px 18px calc(18px + var(--safe-b));
+  max-width: 660px; margin: 0 auto; animation: up .25s cubic-bezier(.2,.8,.3,1);
 }
-@keyframes up { from { transform: translateY(26px); opacity: .5; } }
-.sheet h2 { font-size: .82rem; color: var(--faint); font-weight: 400; margin: 0 0 12px; }
+@keyframes up { from { transform: translateY(24px); } }
+.sheet h2 { font-size: 13px; color: var(--faint); font-weight: 700; margin: 0 0 12px; }
 .sheet textarea {
-  width: 100%; min-height: 128px; resize: vertical;
-  font-family: var(--serif); font-size: 1.04rem; line-height: 1.8;
-  color: var(--ink); background: var(--paper);
-  border: 1px solid var(--rule); border-radius: 12px; padding: 13px;
+  width: 100%; min-height: 132px; resize: vertical; font: inherit; font-size: 15.5px;
+  line-height: 1.9; color: var(--ink); background: var(--paper);
+  border: 2px solid var(--ink); border-radius: 14px; padding: 13px;
 }
-.sheet img { width: 100%; max-height: 66dvh; object-fit: contain; border-radius: 12px; background: var(--paper); }
-.acts { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+.sheet img { width: 100%; max-height: 64dvh; object-fit: contain;
+             border: 2px solid var(--ink); border-radius: 14px; background: var(--paper); }
+.acts { display: flex; gap: 9px; justify-content: flex-end; margin-top: 14px; }
 .acts button {
-  appearance: none; cursor: pointer; font: inherit; font-size: .9rem;
-  padding: 10px 18px; border-radius: 11px; border: 1px solid var(--rule);
-  background: none; color: var(--ink);
+  appearance: none; cursor: pointer; font: inherit; font-size: 14px; font-weight: 700;
+  padding: 10px 20px; border-radius: 12px; border: 2px solid var(--ink);
+  background: var(--card); color: var(--ink); box-shadow: 3px 4px 0 var(--shadow);
 }
-.acts button.primary { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.acts button.primary { background: var(--marker); }
+.acts button:active { transform: translate(2px, 2px); box-shadow: 1px 2px 0 var(--shadow); }
 
 /* ── 토스트 ───────────────────────────────────────────── */
 #toast {
   position: fixed; left: 50%; translate: -50% 0; z-index: 60;
   bottom: calc(86px + var(--safe-b));
-  background: var(--ink); color: var(--paper);
-  padding: 9px 17px; border-radius: 999px; font-size: .84rem;
-  opacity: 0; transition: opacity .2s, translate .2s; pointer-events: none;
+  background: var(--ink); color: var(--paper); font-size: 13.5px; font-weight: 700;
+  padding: 10px 18px; border-radius: 999px; opacity: 0; pointer-events: none;
+  transition: opacity .18s, translate .18s;
 }
-#toast.show { opacity: .96; translate: -50% -6px; }
+#toast.show { opacity: 1; translate: -50% -6px; }
 </style>
 </head>
 <body>
 
-<header id="hd">
+<header>
   <div class="bar">
-    <button class="icon" id="back" hidden aria-label="뒤로">‹</button>
+    <button class="icon" id="back" hidden aria-label="뒤로">←</button>
     <div class="grow">
       <div class="crumb" id="crumb" hidden></div>
-      <h1 id="title">독서 노트</h1>
+      <h1 id="title">밑줄</h1>
     </div>
     <button class="txtbtn" id="photo" hidden>원본</button>
   </div>
@@ -267,8 +291,8 @@ dialog::backdrop { background: rgba(20,17,12,.5); backdrop-filter: blur(2px); }
 <main id="main"></main>
 
 <nav>
-  <button id="tabBooks" class="on"><span class="ic">❋</span>책</button>
-  <button id="tabNotes"><span class="ic">❞</span>노트</button>
+  <button id="tabBooks" class="on">책</button>
+  <button id="tabNotes">밑줄</button>
 </nav>
 
 <dialog id="editBox">
