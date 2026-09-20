@@ -422,17 +422,16 @@ const cmdHelp = (env, chatId) => reply(env, chatId, [
   '<b>/표지 제목 - 지은이</b> — 표지를 잘못 찾았을 때 다시 찾기',
   '<b>/앱초기화</b> — 발급한 앱 링크를 모두 무효로',
   '',
-  '책을 정한 뒤 페이지 사진을 보내면 문장 단위로 저장합니다.',
+  '<b>표지를 찍어 보내면</b> 책이 자동으로 바뀝니다. 타이핑이 필요 없습니다.',
+  '그 뒤 페이지 사진을 보내면 문장 단위로 저장합니다.',
   '펼친 양면으로 찍으면 문장이 잘리지 않아 더 깔끔합니다.'
 ].join('\n'));
 
 // ──────────────────────── 사진 처리 ────────────────────────
 
 async function onPhoto(env, chatId, fileId, caption) {
+  // 책이 안 정해져 있어도 일단 읽어본다. 표지 사진이면 그걸로 책을 정할 수 있기 때문이다.
   const book = await getState(env, '현재_책');
-  if (!book) {
-    return reply(env, chatId, '먼저 책을 정해주세요.\n<b>/책 데미안</b> 처럼 보내시면 됩니다.');
-  }
 
   await tg(env, 'sendChatAction', { chat_id: chatId, action: 'typing' });
 
@@ -454,7 +453,7 @@ async function onPhoto(env, chatId, fileId, caption) {
   // 파싱보다 먼저 저장한다. 파싱이 실패해도 원본은 남아야 한다.
   let photoId = null;
   try {
-    photoId = await saveToDrive(env, base64, mime, book, now);
+    photoId = await saveToDrive(env, base64, mime, book || '표지', now);
   } catch (err) {
     console.error('드라이브 저장 실패: ' + err);   // 저장 실패해도 파싱은 계속한다
   }
@@ -466,6 +465,16 @@ async function onPhoto(env, chatId, fileId, caption) {
     console.error(err.stack || String(err));
     return reply(env, chatId, '⚠️ 처리 중 문제가 생겼습니다.\n\n<code>' +
       esc(String(err.message || err)).slice(0, 700) + '</code>');
+  }
+
+  // 표지를 찍었으면 그걸로 읽는 책을 바꾼다. 타이핑 없이 새 책을 시작할 수 있다.
+  if (parsed.kind === 'cover' && parsed.book_title) {
+    return onCover(env, chatId, parsed, photoId);
+  }
+
+  if (!book) {
+    return reply(env, chatId, '먼저 책을 정해주세요.\n' +
+      '<b>표지를 찍어 보내시거나</b>, <b>/책 데미안 - 헤르만 헤세</b> 처럼 알려주세요.');
   }
 
   if (!parsed.sentences.length) {
@@ -495,6 +504,40 @@ async function onPhoto(env, chatId, fileId, caption) {
   }
 
   return reply(env, chatId, buildReply(env, book, parsed, stitched ? prev : null));
+}
+
+/**
+ * 표지 사진으로 책을 정한다.
+ *
+ * 알라딘에서 찾으면 그 표지를 쓰고, 못 찾으면 **방금 찍은 사진**을 표지로 쓴다.
+ * 어차피 드라이브에 올려 뒀으니 버릴 이유가 없다.
+ */
+async function onCover(env, chatId, parsed, photoId) {
+  const title = parsed.book_title.trim();
+  const author = (parsed.book_author || '').trim();
+
+  await setState(env, '현재_책', title);
+  const found = await lookupBook(env, title, title, author);
+
+  // 알라딘이 표지를 못 줬으면 내가 찍은 표지로 채운다
+  let cover = found && found.cover_url;
+  if (!cover && photoId) {
+    cover = photoUrl(photoId);
+    await saveBook(env, title, {
+      title, author: (found && found.author) || author || null,
+      publisher: found && found.publisher, isbn13: found && found.isbn13,
+      cover_url: cover
+    });
+  }
+
+  const who = (found && found.author) || author;
+  return reply(env, chatId, [
+    '📖 <b>' + esc(title) + '</b>' + josaRo(title) + ' 시작합니다.',
+    who ? '<i>' + esc(who) + (found && found.publisher ? ' · ' + esc(found.publisher) : '') + '</i>' : '',
+    cover ? '' : '<i>표지를 못 찾았습니다</i>',
+    '',
+    '이제 페이지 사진을 보내주세요.'
+  ].filter(Boolean).join('\n'));
 }
 
 /**
@@ -565,6 +608,12 @@ async function saveToDrive(env, base64, mime, book, when) {
 const PAGE_SCHEMA = {
   type: 'OBJECT',
   properties: {
+    kind: { type: 'STRING',
+      description: "책 표지면 'cover', 본문 페이지면 'page', 둘 다 아니면 'other'." },
+    book_title: { type: 'STRING', nullable: true,
+      description: '표지일 때 책 제목. 부제는 빼고 본 제목만.' },
+    book_author: { type: 'STRING', nullable: true,
+      description: '표지일 때 지은이. 옮긴이·그림 표기는 빼고 지은이만.' },
     page_number: { type: 'INTEGER', nullable: true,
       description: '페이지에 인쇄된 쪽번호. 없으면 null. 양면이면 오른쪽(나중) 쪽번호.' },
     sentences: { type: 'ARRAY', items: { type: 'STRING' },
@@ -574,14 +623,22 @@ const PAGE_SCHEMA = {
     ends_mid_sentence: { type: 'BOOLEAN',
       description: '마지막 문장이 끝나지 않고 다음 페이지로 이어지는가.' }
   },
-  propertyOrdering: ['page_number', 'sentences', 'starts_mid_sentence', 'ends_mid_sentence'],
-  required: ['sentences', 'starts_mid_sentence', 'ends_mid_sentence']
+  propertyOrdering: ['kind', 'book_title', 'book_author', 'page_number',
+                     'sentences', 'starts_mid_sentence', 'ends_mid_sentence'],
+  required: ['kind', 'sentences', 'starts_mid_sentence', 'ends_mid_sentence']
 };
 
 const PAGE_PROMPT = [
-  '이 이미지는 책의 한 페이지(또는 펼친 양면)입니다. 본문을 그대로 옮겨 JSON으로만 답하세요.',
+  '이 이미지는 책을 찍은 사진입니다. JSON으로만 답하세요.',
   '',
-  '규칙:',
+  '먼저 무엇을 찍은 것인지 kind 로 판정하세요.',
+  "- 'cover' : 책 표지(겉표지·속표지). 큰 제목과 지은이·출판사가 있고 본문 문단이 없습니다.",
+  "- 'page'  : 본문 페이지. 여러 줄의 문단이 이어집니다.",
+  "- 'other' : 책 사진이 아니거나 글자를 알아볼 수 없음.",
+  "표지라면 book_title 과 book_author 를 채우고 sentences 는 빈 배열로 두세요.",
+  '제목에 부제가 붙어 있으면 본 제목만 쓰세요.',
+  '',
+  '본문 페이지일 때 규칙:',
   '- 본문만 담으세요. 쪽번호, 각주 번호, 머리말(러닝헤드), 챕터 제목, 출판사 정보는 문장에서 빼세요.',
   '- 본문을 문장 단위로 쪼개 sentences 배열에 넣으세요. 대화문의 따옴표는 그대로 둡니다.',
   '- 문단이 바뀌어도 배열 원소를 나누기만 하고 빈 원소는 넣지 마세요.',
@@ -591,7 +648,7 @@ const PAGE_PROMPT = [
   '- 펼친 양면이면 왼쪽 페이지를 먼저, 오른쪽 페이지를 나중에 읽으세요.',
   '- 글자를 알아볼 수 없으면 지어내지 말고 그 자리에 ▯ 를 쓰세요.',
   '- 쪽번호를 찾을 수 없으면 page_number 를 null 로 두세요.',
-  '- 책 페이지가 아니면 sentences 를 빈 배열로 두세요.'
+  '- 본문이 아니면 sentences 를 빈 배열로 두세요.'
 ].join('\n');
 
 async function parsePage(env, base64, mime) {
@@ -644,7 +701,8 @@ async function parsePage(env, base64, mime) {
 
   parsed.sentences = (parsed.sentences || []).map((s) => String(s).trim()).filter(Boolean);
 
-  if (!parsed.sentences.length) {
+  // 표지는 문장이 없는 게 정상이라 경고하지 않는다
+  if (!parsed.sentences.length && parsed.kind !== 'cover') {
     console.warn('문장 0개. finishReason=' + (cand.finishReason || '?') + ' / ' + text.slice(0, 600));
   }
   return parsed;
