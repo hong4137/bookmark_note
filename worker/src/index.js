@@ -565,6 +565,44 @@ async function onPhoto(env, chatId, fileId, caption) {
       '글자를 읽어내지 못했습니다. 밝은 곳에서 페이지가 평평하게 펴지도록 다시 찍어주세요. 📷');
   }
 
+  // 같은 쪽을 다시 찍는 일이 잦다. 더 잘 나온 사진으로 다시 찍거나, 앨범에 섞여
+  // 딸려 들어오거나. 그냥 넣으면 앱에 같은 쪽이 두 벌 뜬다.
+  // 쪽번호를 읽어냈을 때만 판단할 수 있다 — 못 읽었으면 별개로 둔다.
+  const dup = parsed.page_number == null ? null : await env.DB.prepare(
+    'SELECT p.*, (SELECT COUNT(*) FROM notes n WHERE n.page_id = p.id) AS notes' +
+    ' FROM pages p WHERE p.book = ? AND p.page = ? ORDER BY p.shot_at LIMIT 1'
+  ).bind(book, parsed.page_number).first();
+
+  // 밑줄이 붙어 있으면 손대지 않는다. 문장이 한 칸이라도 밀리면 밑줄이 엉뚱한
+  // 문장을 가리키게 된다. 밑줄은 이 시스템에서 유일하게 사람이 직접 만든 것이다.
+  if (dup && dup.notes > 0) {
+    return reply(env, chatId,
+      '📎 <b>' + esc(book) + '</b> ' + parsed.page_number + '쪽은 이미 있습니다.\n' +
+      '밑줄 ' + dup.notes + '개가 붙어 있어 그대로 두었습니다.\n\n' +
+      '<i>다시 넣으려면 앱에서 그 밑줄을 먼저 지우고 찍어주세요.</i>');
+  }
+
+  // 밑줄이 없으면 잃을 것이 없다. 나중에 찍은 사진이 대개 더 낫다.
+  // 자리는 그대로 두려고 id 와 shot_at 을 유지한 채 내용만 갈아 끼운다.
+  if (dup) {
+    await env.DB.prepare(
+      'UPDATE pages SET sentences = ?, starts_mid = ?, ends_mid = ?,' +
+      ' photo_id = COALESCE(?, photo_id), raw = ? WHERE id = ?'
+    ).bind(
+      JSON.stringify(parsed.sentences),
+      parsed.starts_mid_sentence ? 1 : 0,
+      parsed.ends_mid_sentence ? 1 : 0,
+      photoId, parsed.sentences.join(' '), dup.id
+    ).run();
+
+    const dupPrev = dup.prev_id
+      ? await env.DB.prepare('SELECT * FROM pages WHERE id = ?').bind(dup.prev_id).first()
+      : null;
+
+    return reply(env, chatId, buildReply(env, book, parsed, dupPrev) +
+      '\n\n<i>이미 있던 ' + parsed.page_number + '쪽을 이 사진으로 바꿨습니다</i>');
+  }
+
   const prev = await previousPage(env, book, now.toISOString());
   const stitched = shouldStitch(prev, parsed, now);
 
