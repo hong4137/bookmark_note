@@ -467,14 +467,24 @@ async function onPhoto(env, chatId, fileId, caption) {
       esc(String(err.message || err)).slice(0, 700) + '</code>');
   }
 
+  const kind = String(parsed.kind || '').toLowerCase();
+  const title = (parsed.book_title || '').trim();
+  console.log('판정: kind=' + kind + ' / 제목=' + title +
+              ' / 지은이=' + (parsed.book_author || '') + ' / 문장=' + parsed.sentences.length);
+
   // 표지를 찍었으면 그걸로 읽는 책을 바꾼다. 타이핑 없이 새 책을 시작할 수 있다.
-  if (parsed.kind === 'cover' && parsed.book_title) {
+  //
+  // kind 를 곧이곧대로 믿지 않는다. 표지에도 띠지·추천사·수상 문구가 많아서
+  // 'page' 로 잘못 보는 일이 있다. 제목을 읽어냈고 본문 문단이 없으면 표지로 본다.
+  if (title && (kind === 'cover' || !parsed.sentences.length)) {
     return onCover(env, chatId, parsed, photoId);
   }
 
   if (!book) {
+    const hint = title ? '\n<i>읽어낸 제목: ' + esc(title) + ' (본문으로 보여 그냥 두었습니다)</i>'
+                       : (kind ? '\n<i>이 사진은 ' + esc(kind) + ' 으로 보입니다</i>' : '');
     return reply(env, chatId, '먼저 책을 정해주세요.\n' +
-      '<b>표지를 찍어 보내시거나</b>, <b>/책 데미안 - 헤르만 헤세</b> 처럼 알려주세요.');
+      '<b>표지를 찍어 보내시거나</b>, <b>/책 데미안 - 헤르만 헤세</b> 처럼 알려주세요.' + hint);
   }
 
   if (!parsed.sentences.length) {
@@ -625,18 +635,27 @@ const PAGE_SCHEMA = {
   },
   propertyOrdering: ['kind', 'book_title', 'book_author', 'page_number',
                      'sentences', 'starts_mid_sentence', 'ends_mid_sentence'],
-  required: ['kind', 'sentences', 'starts_mid_sentence', 'ends_mid_sentence']
+  required: ['kind', 'book_title', 'book_author', 'sentences',
+             'starts_mid_sentence', 'ends_mid_sentence']
 };
 
 const PAGE_PROMPT = [
   '이 이미지는 책을 찍은 사진입니다. JSON으로만 답하세요.',
   '',
   '먼저 무엇을 찍은 것인지 kind 로 판정하세요.',
-  "- 'cover' : 책 표지(겉표지·속표지). 큰 제목과 지은이·출판사가 있고 본문 문단이 없습니다.",
+  "- 'cover' : 책 표지(겉표지·속표지·뒤표지).",
   "- 'page'  : 본문 페이지. 여러 줄의 문단이 이어집니다.",
   "- 'other' : 책 사진이 아니거나 글자를 알아볼 수 없음.",
-  "표지라면 book_title 과 book_author 를 채우고 sentences 는 빈 배열로 두세요.",
-  '제목에 부제가 붙어 있으면 본 제목만 쓰세요.',
+  '',
+  '표지에는 띠지 문구, 추천사, 수상 내역, 저자 사진, 출판사 로고가 함께 인쇄되어',
+  '있는 경우가 많습니다. **그런 문구가 아무리 많아도 본문 문단이 아니면 표지입니다.**',
+  '큰 글씨의 제목과 지은이 이름이 보이면 거의 확실히 표지입니다.',
+  '',
+  '표지라면 book_title 과 book_author 를 채우고 sentences 는 빈 배열로 두세요.',
+  '- book_title: 가장 크게 인쇄된 본 제목만. 부제·띠지 문구·시리즈명은 빼세요.',
+  '  예) 위에 작게 "AI는 생각하지 않는다", 크게 "AI 리터러시" → "AI 리터러시"',
+  '- book_author: "이재현 지음" 처럼 적혀 있으면 "이재현" 만 쓰세요.',
+  '표지가 아니면 book_title 과 book_author 를 null 로 두세요.',
   '',
   '본문 페이지일 때 규칙:',
   '- 본문만 담으세요. 쪽번호, 각주 번호, 머리말(러닝헤드), 챕터 제목, 출판사 정보는 문장에서 빼세요.',
@@ -702,7 +721,9 @@ async function parsePage(env, base64, mime) {
   parsed.sentences = (parsed.sentences || []).map((s) => String(s).trim()).filter(Boolean);
 
   // 표지는 문장이 없는 게 정상이라 경고하지 않는다
-  if (!parsed.sentences.length && parsed.kind !== 'cover') {
+  const looksLikeCover = String(parsed.kind || '').toLowerCase() === 'cover' ||
+                         !!(parsed.book_title || '').trim();
+  if (!parsed.sentences.length && !looksLikeCover) {
     console.warn('문장 0개. finishReason=' + (cand.finishReason || '?') + ' / ' + text.slice(0, 600));
   }
   return parsed;
