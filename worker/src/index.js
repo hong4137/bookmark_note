@@ -192,7 +192,16 @@ function telegramHook(req, env, ctx) {
 
   // 파싱은 수십 초가 걸린다. 텔레그램에는 먼저 200 을 돌려주고 뒤에서 일한다.
   return req.json().then((update) => {
-    ctx.waitUntil(handleUpdate(update, env).catch((err) => console.error(err.stack || String(err))));
+    ctx.waitUntil(handleUpdate(update, env).catch((err) => {
+      console.error(err.stack || String(err));
+
+      // 여기서 말없이 끝내면 사진을 아예 못 받은 것처럼 보인다.
+      // 사진을 여러 장 한꺼번에 보냈을 때 한 장만 답장이 오던 증상이 이것이었다.
+      const msg = update.message || update.channel_post;
+      if (!msg || !msg.chat) return;
+      return reply(env, msg.chat.id, '⚠️ 이 사진을 처리하지 못했습니다.\n\n<code>' +
+        esc(String(err.message || err)).slice(0, 500) + '</code>');
+    }));
     return new Response('ok');
   });
 }
@@ -219,6 +228,12 @@ async function handleUpdate(update, env) {
     console.warn('미승인 접근: chat_id=' + chatId);
     return reply(env, chatId, '이 봇은 지정된 사용자만 사용할 수 있습니다.');
   }
+
+  // 여러 장을 한꺼번에 보내면 텔레그램은 같은 media_group_id 로 update 를 따로 보낸다.
+  // 몇 장이 실제로 도착했는지는 이 줄로만 알 수 있다.
+  console.log('update ' + msg.message_id +
+              (msg.media_group_id ? ' / 앨범 ' + msg.media_group_id : '') +
+              (msg.photo ? ' / 사진' : ''));
 
   const text = (msg.text || '').trim();
 
