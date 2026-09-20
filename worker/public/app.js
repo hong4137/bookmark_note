@@ -48,12 +48,13 @@ async function api(path, body) {
 // ──────────────────────── 들고 있는 데이터 ────────────────────────
 
 /** { pages: [...], notes: [...] } — 첫 로딩에 통째로 받는다 */
-let db = { pages: [], notes: [] };
+let db = { pages: [], notes: [], books: [] };
 let noteFilter = null;   // 밑줄 화면에서 고른 책
 let view = { name: 'books' };
 
 const byId = (id) => db.pages.find((p) => p.id === id);
 const notesOf = (pageId) => db.notes.filter((n) => n.page_id === pageId);
+const infoOf = (book) => (db.books || []).find((b) => b.book === book) || {};
 
 function books() {
   const m = new Map();
@@ -147,23 +148,48 @@ function showBooks() {
 
   const box = el('div');
   for (const b of list) {
-    const card = el('div', 'card');
+    const info = infoOf(b.book);
+    const card = el('div', 'card with-cover');
+
+    const body = el('div', 'cbody');
     const h = el('div', 'h');
     h.append(el('b', null, b.book), el('span', 'sp'));
     if (b.notes) h.append(el('span', 'count', b.notes));
-    card.append(h, el('div', 'sub',
+    body.append(h);
+
+    if (info.author) body.append(el('div', 'byline', info.author));
+    body.append(el('div', 'sub',
       b.pages + '쪽 기록' + (b.notes ? ' · 밑줄 ' + b.notes + '개' : '')));
+
+    card.append(cover(info, b.book), body);
     card.onclick = () => showPages(b.book);
     box.append(card);
   }
   render(box);
 }
 
+/** 표지가 없으면 책 이름 첫 글자로 대신한다 — 자리가 비어 보이지 않게 */
+function cover(info, book) {
+  const box = el('div', 'cover');
+  if (info.cover_url) {
+    const img = el('img');
+    img.src = info.cover_url;
+    img.alt = '';
+    img.loading = 'lazy';
+    img.onerror = () => { box.textContent = book.slice(0, 1); box.classList.add('noimg'); };
+    box.append(img);
+  } else {
+    box.textContent = book.slice(0, 1);
+    box.classList.add('noimg');
+  }
+  return box;
+}
+
 // ──────────────────────── 페이지 목록 ────────────────────────
 
 function showPages(book) {
   view = { name: 'pages', book };
-  chrome({ crumb: '책', title: book, showBack: true, showPhoto: false });
+  chrome({ crumb: '책', title: book, sub: infoOf(book).author || '', showBack: true, showPhoto: false });
   setTab('books');
 
   const pages = pagesOf(book);

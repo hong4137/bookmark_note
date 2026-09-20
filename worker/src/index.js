@@ -15,6 +15,7 @@
  *   GEMINI_API_KEY       https://aistudio.google.com/apikey
  *   DRIVE_SECRET         드라이브 어댑터와 나눠 가진 암호
  *   ADMIN_SECRET         시트 → D1 이전용
+ *   ALADIN_TTB_KEY       알라딘 Open API 키 (표지·서지. 없으면 표지만 안 나온다)
  * 변수 (wrangler.toml [vars]):
  *   ALLOWED_CHATS        쉼표로 구분한 텔레그램 챗 ID
  *   DRIVE_ADAPTER_URL    Apps Script 어댑터의 /exec 주소
@@ -81,12 +82,14 @@ async function apiRoute(req, env, url) {
 
 /** 첫 로딩에 전부 내려준다 — 화면 이동마다 서버를 부르지 않기 위해서다 */
 async function bootstrap(env) {
-  const [pages, notes] = await Promise.all([
+  const [pages, notes, books] = await Promise.all([
     env.DB.prepare('SELECT * FROM pages ORDER BY shot_at').all(),
-    env.DB.prepare('SELECT * FROM notes ORDER BY saved_at').all()
+    env.DB.prepare('SELECT * FROM notes ORDER BY saved_at').all(),
+    env.DB.prepare('SELECT book, title, author, publisher, cover_url FROM books').all()
   ]);
 
   return {
+    books: books.results,
     pages: pages.results.map((p) => ({
       id: p.id,
       book: p.book,
@@ -216,6 +219,7 @@ async function handleUpdate(update, env) {
   const text = (msg.text || '').trim();
 
   if (text.startsWith('/책')) return cmdBook(env, chatId, text.slice(2).trim());
+  if (text.startsWith('/표지')) return cmdCover(env, chatId, text.slice(3).trim());
   if (text.startsWith('/앱초기화')) return cmdResetApp(env, chatId);   // /앱 보다 먼저 봐야 한다
   if (text.startsWith('/앱')) return cmdApp(env, chatId);
   if (text.startsWith('/start')) return cmdHelp(env, chatId);
@@ -247,8 +251,86 @@ async function cmdBook(env, chatId, name) {
       : '아직 책을 정하지 않았습니다.\n<b>/책 데미안</b> 처럼 보내주세요.');
   }
   await setState(env, '현재_책', name);
-  return reply(env, chatId, '📖 <b>' + esc(name) + '</b>' + josaRo(name) +
-    ' 설정했습니다.\n이제 페이지 사진을 보내주세요.');
+  const found = await lookupBook(env, name);
+
+  const lines = ['📖 <b>' + esc(name) + '</b>' + josaRo(name) + ' 설정했습니다.'];
+  if (found) {
+    lines.push('<i>' + esc([found.author, found.publisher].filter(Boolean).join(' · ')) + '</i>');
+  }
+  lines.push('이제 페이지 사진을 보내주세요.');
+  return reply(env, chatId, lines.join('\n'));
+}
+
+/** 표지를 잘못 찾아왔을 때, 더 정확한 제목으로 다시 찾는다 */
+async function cmdCover(env, chatId, query) {
+  const book = await getState(env, '현재_책');
+  if (!book) return reply(env, chatId, '먼저 <b>/책 데미안</b> 처럼 책을 정해주세요.');
+
+  const found = await lookupBook(env, book, query || book);
+  if (!found) {
+    return reply(env, chatId, '표지를 찾지 못했습니다.\n' +
+      '<b>/표지 정확한 제목</b> 처럼 다시 알려주시면 그걸로 찾아봅니다.');
+  }
+
+  return reply(env, chatId, '🖼 <b>' + esc(found.title || book) + '</b>\n' +
+    esc([found.author, found.publisher].filter(Boolean).join(' · ')) +
+    '\n\n<a href="' + found.cover_url + '">표지 보기</a>');
+}
+
+/**
+ * 알라딘 Open API 로 표지와 서지 정보를 찾아 books 에 넣는다.
+ * 키가 없거나 못 찾아도 그냥 넘어간다 — 표지는 있으면 좋은 것이지 필수가 아니다.
+ *
+ * `book` 은 앱에서 쓰는 이름(= /책 으로 정한 이름), `query` 는 검색어다.
+ * 보통 같지만, /표지 로 더 정확한 제목을 줄 수 있어서 나눠 둔다.
+ */
+async function lookupBook(env, book, query) {
+  if (!env.ALADIN_TTB_KEY) return null;
+
+  try {
+    const url = 'https://www.aladin.co.kr/ttb/api/ItemSearch.aspx?' + new URLSearchParams({
+      ttbkey: env.ALADIN_TTB_KEY,
+      Query: query || book,
+      QueryType: 'Title',
+      MaxResults: '1',
+      start: '1',
+      SearchTarget: 'Book',
+      Cover: 'Big',
+      output: 'js',
+      Version: '20131101'
+    });
+
+    const res = await fetch(url);
+    const text = await res.text();
+    if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + text.slice(0, 200));
+
+    // output=js 인데도 끝에 세미콜론이 붙어 오는 경우가 있다
+    const data = JSON.parse(text.trim().replace(/;$/, ''));
+    const it = data.item && data.item[0];
+    if (!it) return null;
+
+    const row = {
+      title: it.title || null,
+      author: it.author || null,
+      publisher: it.publisher || null,
+      isbn13: it.isbn13 || null,
+      cover_url: it.cover || null
+    };
+
+    await env.DB.prepare(
+      'INSERT INTO books (book, title, author, publisher, isbn13, cover_url, looked_up_at)' +
+      ' VALUES (?,?,?,?,?,?,?)' +
+      ' ON CONFLICT(book) DO UPDATE SET title=excluded.title, author=excluded.author,' +
+      ' publisher=excluded.publisher, isbn13=excluded.isbn13, cover_url=excluded.cover_url,' +
+      ' looked_up_at=excluded.looked_up_at'
+    ).bind(book, row.title, row.author, row.publisher, row.isbn13, row.cover_url,
+           new Date().toISOString()).run();
+
+    return row;
+  } catch (err) {
+    console.error('표지 조회 실패: ' + (err.stack || err));
+    return null;
+  }
 }
 
 /** 받침에 따라 '으로' / '로' — "데미안으로", "AI리터러시로" */
@@ -289,6 +371,7 @@ const cmdHelp = (env, chatId) => reply(env, chatId, [
   '<b>/책 데미안</b> — 읽는 책 정하기',
   '<b>/책</b> — 지금 무슨 책인지',
   '<b>/앱</b> — 밑줄 앱 열기',
+  '<b>/표지</b> — 표지를 잘못 찾았을 때 다시 찾기',
   '<b>/앱초기화</b> — 발급한 앱 링크를 모두 무효로',
   '',
   '책을 정한 뒤 페이지 사진을 보내면 문장 단위로 저장합니다.',

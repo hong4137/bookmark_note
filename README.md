@@ -105,6 +105,7 @@ npx wrangler secret put TELEGRAM_SECRET     # 아무 긴 문자열. 5단계에�
 npx wrangler secret put GEMINI_API_KEY
 npx wrangler secret put DRIVE_SECRET        # 1단계에서 받은 값
 npx wrangler secret put ADMIN_SECRET        # 아무 긴 문자열. 6단계에서 쓴다
+npx wrangler secret put ALADIN_TTB_KEY      # (선택) 책 표지. 없으면 표지만 안 나온다
 npx wrangler deploy
 ```
 
@@ -150,6 +151,7 @@ Invoke-RestMethod "https://api.telegram.org/bot$token/setWebhook?url=$worker/tg&
 | `/책 데미안` | 읽는 책 설정. 이후 사진은 전부 이 책으로 |
 | `/책` | 지금 무슨 책인지 |
 | `/앱` | 앱 링크 발급 |
+| `/표지 제목` | 표지를 잘못 찾았을 때 다시 찾기 |
 | 📷 사진 | 파싱 → 저장 → 결과 답장 |
 
 앱에서:

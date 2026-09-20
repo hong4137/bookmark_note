@@ -33,3 +33,15 @@ CREATE TABLE IF NOT EXISTS state (k TEXT PRIMARY KEY, v TEXT);
 
 -- 앱 접근 토큰. 봇이 /앱 명령으로 발급한다.
 CREATE TABLE IF NOT EXISTS app_tokens (token TEXT PRIMARY KEY, created_at TEXT);
+
+-- 책 표지·서지 정보. /책 으로 책을 정할 때 알라딘에서 한 번 찾아 넣는다.
+-- 없어도 앱은 그대로 돌아간다(표지 자리만 빈다).
+CREATE TABLE IF NOT EXISTS books (
+  book         TEXT PRIMARY KEY,
+  title        TEXT,
+  author       TEXT,
+  publisher    TEXT,
+  isbn13       TEXT,
+  cover_url    TEXT,
+  looked_up_at TEXT
+);

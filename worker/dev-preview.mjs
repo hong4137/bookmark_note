@@ -28,6 +28,12 @@ const PHOTO = 'data:image/svg+xml;utf8,' + encodeURIComponent(
   '<text x="310" y="430" text-anchor="middle" font-size="26" fill="#8b8275">page photo</text></svg>');
 
 const db = {
+  books: [
+    { book: 'AI 리터러시', title: 'AI 리터러시', author: '김진태', publisher: '어크로스',
+      cover_url: 'https://image.aladin.co.kr/product/33556/34/cover200/k072939676_1.jpg' },
+    { book: '데미안', title: '데미안', author: '헤르만 헤세', publisher: '민음사',
+      cover_url: 'https://image.aladin.co.kr/product/10537/49/cover200/8936447017_1.jpg' }
+  ],
   pages: [
     {
       id: 'p1', book: 'AI 리터러시', page: 48, shot_at: '2026-09-19T01:28:00+09:00',
