@@ -1,0 +1,23 @@
+# 밑줄 — Cloudflare Worker
+# 공개되어도 되는 값만 여기에 둔다. 토큰은 wrangler secret put 으로 넣는다.
+
+name = "bookmark-note"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "booknote"
+database_id = "00000000-0000-0000-0000-000000000000"  # wrangler d1 create 후 실제 id 로 바꾸세요
+
+[vars]
+# 텔레그램 챗 ID. 여러 명이면 쉼표로.
+ALLOWED_CHATS = ""
+# Apps Script 드라이브 어댑터의 /exec 주소
+DRIVE_ADAPTER_URL = ""
+# 배포된 Worker 주소 (봇 답장의 앱 링크에 쓴다)
+APP_URL = ""

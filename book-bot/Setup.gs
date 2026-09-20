@@ -277,6 +277,81 @@ function 마지막사진_파싱테스트() {
 }
 
 
+// ═══════════════ v2 이전 (Cloudflare) ═══════════════
+
+/** 배포한 Worker 주소와 ADMIN_SECRET. 이전할 때만 채웁니다. */
+const WORKER_URL = '';
+const ADMIN_SECRET = '';
+
+/**
+ * 시트에 쌓인 것을 D1 으로 한 번에 옮깁니다. 여러 번 실행해도 안전합니다
+ * (같은 id 는 덮어씁니다).
+ *
+ * 옮기고 나면 반드시 `트리거_제거` 로 이 봇을 멈추세요.
+ * 텔레그램은 봇 하나에 웹훅과 getUpdates 를 동시에 허용하지 않습니다.
+ */
+function v2_D1로_이전() {
+  if (!/^https:\/\//.test(WORKER_URL)) throw new Error('WORKER_URL 을 채우세요.');
+  if (!ADMIN_SECRET) throw new Error('ADMIN_SECRET 을 채우세요.');
+
+  const pages = rows_(PAGE_SHEET).map(function (r) {
+    return {
+      id: String(r[0]),
+      book: String(r[1]),
+      page: r[2] === '' ? null : Number(r[2]),
+      shot_at: toIso_(r[3]),
+      sentences: parseJson_(r[4]),
+      starts_mid: String(r[5]).toUpperCase() === 'TRUE',
+      ends_mid: String(r[6]).toUpperCase() === 'TRUE',
+      prev_id: String(r[7]) || null,
+      photo_id: String(r[8]) || null
+    };
+  }).filter(function (p) { return p.id; });
+
+  const notes = rows_(NOTE_SHEET).map(function (r) {
+    return {
+      id: String(r[0]),
+      page_id: String(r[1]),
+      book: String(r[2]),
+      page: r[3] === '' ? null : Number(r[3]),
+      text: String(r[4]),
+      idx: Number(r[5]),
+      saved_at: toIso_(r[7])
+    };
+  }).filter(function (n) { return n.id && n.page_id; });
+
+  const res = UrlFetchApp.fetch(WORKER_URL.replace(/\/$/, '') + '/admin/import', {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({ secret: ADMIN_SECRET, pages: pages, notes: notes }),
+    muteHttpExceptions: true
+  });
+
+  console.log('HTTP ' + res.getResponseCode());
+  console.log(res.getContentText());
+  console.log('\n보낸 것: 페이지 ' + pages.length + '건, 노트 ' + notes.length + '건');
+  console.log('성공했으면 이제 `트리거_제거` 로 v1 봇을 멈추세요.');
+}
+
+function rows_(name) {
+  const values = sheet_(name).getDataRange().getValues();
+  return values.length > 1 ? values.slice(1) : [];
+}
+
+function parseJson_(v) {
+  try {
+    const a = JSON.parse(v);
+    return Array.isArray(a) ? a : [];
+  } catch (err) { return []; }
+}
+
+/** 시트의 "2026-09-19 01:30:00" 을 ISO 로. 정렬 기준이라 형식이 맞아야 한다. */
+function toIso_(v) {
+  const d = (v instanceof Date) ? v : new Date(String(v).replace(' ', 'T') + '+09:00');
+  return isNaN(d) ? new Date().toISOString() : d.toISOString();
+}
+
+
 /** 지금 쓸 수 있는 Gemini 모델 목록 — 호출이 404가 나면 여기서 이름을 확인하세요 */
 function 모델_확인() {
   const res = UrlFetchApp.fetch(
