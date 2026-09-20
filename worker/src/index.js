@@ -243,33 +243,62 @@ const setState = (env, k, v) => env.DB
   .prepare('INSERT INTO state (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v')
   .bind(k, v).run();
 
-async function cmdBook(env, chatId, name) {
-  if (!name) {
+/**
+ * "데미안 - 헤르만 헤세" 를 책 이름과 지은이로 가른다.
+ *
+ * 제목만으로 찾으면 같은 제목의 다른 책을 가져오는 일이 잦아서, 지은이를
+ * 같이 받는다. 구분자는 공백을 낀 ` - ` 나 ` / ` 만 본다. 제목 안의 하이픈·
+ * 콜론까지 자르면 멀쩡한 제목이 잘리기 때문이다.
+ */
+function splitBook(raw) {
+  const m = String(raw).match(/^(.+?)\s+[-–—/]\s+(.+)$/);
+  return m ? { book: m[1].trim(), author: m[2].trim() }
+           : { book: String(raw).trim(), author: '' };
+}
+
+async function cmdBook(env, chatId, rest) {
+  if (!rest) {
     const now = await getState(env, '현재_책');
     return reply(env, chatId, now
       ? '지금 읽는 책: <b>' + esc(now) + '</b>'
-      : '아직 책을 정하지 않았습니다.\n<b>/책 데미안</b> 처럼 보내주세요.');
+      : '아직 책을 정하지 않았습니다.\n<b>/책 데미안 - 헤르만 헤세</b> 처럼 보내주세요.');
   }
-  await setState(env, '현재_책', name);
-  const found = await lookupBook(env, name);
 
-  const lines = ['📖 <b>' + esc(name) + '</b>' + josaRo(name) + ' 설정했습니다.'];
-  if (found) {
+  const { book, author } = splitBook(rest);
+  await setState(env, '현재_책', book);
+  const found = await lookupBook(env, book, book, author);
+
+  const lines = ['📖 <b>' + esc(book) + '</b>' + josaRo(book) + ' 설정했습니다.'];
+
+  if (found && found.cover_url) {
     lines.push('<i>' + esc([found.author, found.publisher].filter(Boolean).join(' · ')) + '</i>');
+  } else if (found) {
+    lines.push('<i>' + esc(found.author || '') + ' · 표지는 못 찾았습니다</i>');
+  } else if (!author) {
+    lines.push('<i>표지를 못 찾았습니다. <b>/책 제목 - 지은이</b> 로 알려주시면 더 잘 찾습니다</i>');
   }
+
   lines.push('이제 페이지 사진을 보내주세요.');
   return reply(env, chatId, lines.join('\n'));
 }
 
 /** 표지를 잘못 찾아왔을 때, 더 정확한 제목으로 다시 찾는다 */
-async function cmdCover(env, chatId, query) {
+async function cmdCover(env, chatId, rest) {
   const book = await getState(env, '현재_책');
-  if (!book) return reply(env, chatId, '먼저 <b>/책 데미안</b> 처럼 책을 정해주세요.');
+  if (!book) return reply(env, chatId, '먼저 <b>/책 데미안 - 헤르만 헤세</b> 처럼 책을 정해주세요.');
 
-  const found = await lookupBook(env, book, query || book);
+  // 책 이름은 그대로 두고 검색어만 바꾼다. 앱에서 쓰는 이름이 바뀌면
+  // 이미 쌓인 페이지와 갈라지기 때문이다.
+  const { book: title, author } = splitBook(rest || book);
+  const found = await lookupBook(env, book, title, author);
+
   if (!found) {
     return reply(env, chatId, '표지를 찾지 못했습니다.\n' +
-      '<b>/표지 정확한 제목</b> 처럼 다시 알려주시면 그걸로 찾아봅니다.');
+      '<b>/표지 정확한 제목 - 지은이</b> 로 알려주시면 그걸로 다시 찾습니다.');
+  }
+  if (!found.cover_url) {
+    return reply(env, chatId, '지은이는 <b>' + esc(found.author || '') + '</b> 로 적어 뒀습니다.\n' +
+      '표지는 못 찾았습니다.');
   }
 
   return reply(env, chatId, '🖼 <b>' + esc(found.title || book) + '</b>\n' +
@@ -284,14 +313,20 @@ async function cmdCover(env, chatId, query) {
  * `book` 은 앱에서 쓰는 이름(= /책 으로 정한 이름), `query` 는 검색어다.
  * 보통 같지만, /표지 로 더 정확한 제목을 줄 수 있어서 나눠 둔다.
  */
-async function lookupBook(env, book, query) {
-  if (!env.ALADIN_TTB_KEY) return null;
+async function lookupBook(env, book, title, author) {
+  // 지은이를 알면 제목만 볼 때보다 훨씬 정확해진다. 그때는 둘을 합쳐 키워드로 찾는다.
+  const query = author ? (title || book) + ' ' + author : (title || book);
+
+  if (!env.ALADIN_TTB_KEY) {
+    // 키가 없어도 사용자가 알려준 지은이는 적어 둔다
+    return author ? saveBook(env, book, { author }) : null;
+  }
 
   try {
     const url = 'https://www.aladin.co.kr/ttb/api/ItemSearch.aspx?' + new URLSearchParams({
       ttbkey: env.ALADIN_TTB_KEY,
-      Query: query || book,
-      QueryType: 'Title',
+      Query: query,
+      QueryType: author ? 'Keyword' : 'Title',
       MaxResults: '1',
       start: '1',
       SearchTarget: 'Book',
@@ -307,30 +342,42 @@ async function lookupBook(env, book, query) {
     // output=js 인데도 끝에 세미콜론이 붙어 오는 경우가 있다
     const data = JSON.parse(text.trim().replace(/;$/, ''));
     const it = data.item && data.item[0];
-    if (!it) return null;
 
-    const row = {
+    // 못 찾아도 사용자가 알려준 지은이는 남긴다. 표지는 없어도 지은이는 쓸모가 있다.
+    if (!it) return author ? saveBook(env, book, { author }) : null;
+
+    return saveBook(env, book, {
       title: it.title || null,
-      author: it.author || null,
+      author: it.author || author || null,
       publisher: it.publisher || null,
       isbn13: it.isbn13 || null,
       cover_url: it.cover || null
-    };
-
-    await env.DB.prepare(
-      'INSERT INTO books (book, title, author, publisher, isbn13, cover_url, looked_up_at)' +
-      ' VALUES (?,?,?,?,?,?,?)' +
-      ' ON CONFLICT(book) DO UPDATE SET title=excluded.title, author=excluded.author,' +
-      ' publisher=excluded.publisher, isbn13=excluded.isbn13, cover_url=excluded.cover_url,' +
-      ' looked_up_at=excluded.looked_up_at'
-    ).bind(book, row.title, row.author, row.publisher, row.isbn13, row.cover_url,
-           new Date().toISOString()).run();
-
-    return row;
+    });
   } catch (err) {
     console.error('표지 조회 실패: ' + (err.stack || err));
-    return null;
+    return author ? saveBook(env, book, { author }) : null;
   }
+}
+
+async function saveBook(env, book, row) {
+  const r = {
+    title: row.title || null,
+    author: row.author || null,
+    publisher: row.publisher || null,
+    isbn13: row.isbn13 || null,
+    cover_url: row.cover_url || null
+  };
+
+  await env.DB.prepare(
+    'INSERT INTO books (book, title, author, publisher, isbn13, cover_url, looked_up_at)' +
+    ' VALUES (?,?,?,?,?,?,?)' +
+    ' ON CONFLICT(book) DO UPDATE SET title=excluded.title, author=excluded.author,' +
+    ' publisher=excluded.publisher, isbn13=excluded.isbn13, cover_url=excluded.cover_url,' +
+    ' looked_up_at=excluded.looked_up_at'
+  ).bind(book, r.title, r.author, r.publisher, r.isbn13, r.cover_url,
+         new Date().toISOString()).run();
+
+  return r;
 }
 
 /** 받침에 따라 '으로' / '로' — "데미안으로", "AI리터러시로" */
@@ -368,10 +415,11 @@ async function cmdResetApp(env, chatId) {
 const cmdHelp = (env, chatId) => reply(env, chatId, [
   '🔖 <b>밑줄</b>',
   '',
-  '<b>/책 데미안</b> — 읽는 책 정하기',
+  '<b>/책 데미안 - 헤르만 헤세</b> — 읽는 책 정하기',
+  '     지은이를 같이 주면 표지를 훨씬 잘 찾습니다',
   '<b>/책</b> — 지금 무슨 책인지',
   '<b>/앱</b> — 밑줄 앱 열기',
-  '<b>/표지</b> — 표지를 잘못 찾았을 때 다시 찾기',
+  '<b>/표지 제목 - 지은이</b> — 표지를 잘못 찾았을 때 다시 찾기',
   '<b>/앱초기화</b> — 발급한 앱 링크를 모두 무효로',
   '',
   '책을 정한 뒤 페이지 사진을 보내면 문장 단위로 저장합니다.',

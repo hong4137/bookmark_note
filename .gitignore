@@ -1,3 +1,4 @@
 # wrangler 가 만드는 로컬 상태 (로컬 D1 파일 등)
 worker/.wrangler/
 node_modules/
+worker/.dev.vars
