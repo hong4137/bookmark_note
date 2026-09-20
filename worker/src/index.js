@@ -442,7 +442,12 @@ async function onPhoto(env, chatId, fileId, caption) {
       env.TELEGRAM_BOT_TOKEN + '/' + got.result.file_path);
     if (!res.ok) throw new Error('사진 다운로드 실패 (HTTP ' + res.status + ')');
     bytes = await res.arrayBuffer();
-    mime = res.headers.get('content-type') || 'image/jpeg';
+    // 텔레그램 파일 CDN 이 application/octet-stream 을 줄 때가 있다.
+    // 그대로 넘기면 Gemini 가 이미지를 이미지로 보지 않는다. 사진은 늘 JPEG 다.
+    mime = res.headers.get('content-type') || '';
+    if (!/^image\//.test(mime)) mime = 'image/jpeg';
+    console.log('사진 수신: ' + Math.round(bytes.byteLength / 1024) + 'KB, ' +
+                (res.headers.get('content-type') || '(타입 없음)') + ' → ' + mime);
   } catch (err) {
     return reply(env, chatId, '⚠️ 사진을 가져오지 못했습니다.\n\n<code>' + esc(String(err.message)) + '</code>');
   }
@@ -704,6 +709,11 @@ async function parsePage(env, base64, mime) {
 
   const body = JSON.parse(raw);
   const cand = (body.candidates && body.candidates[0]) || {};
+
+  // 이미지가 실렸는지 확인하는 가장 확실한 수단. IMAGE 토큰이 없으면 안 간 것이다.
+  const usage = body.usageMetadata || {};
+  console.log('Gemini usage: prompt=' + usage.promptTokenCount +
+              ' / ' + JSON.stringify(usage.promptTokensDetails || []));
 
   // Gemini 3 계열은 응답을 여러 조각으로 나눠 보내고, thought 조각은 결과가 아니다
   const text = (((cand.content || {}).parts) || [])
