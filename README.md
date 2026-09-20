@@ -118,8 +118,14 @@ npx wrangler deploy
 
 그 다음 같은 봇의 수신처만 Worker 로 바꾼다.
 
-```bash
-curl "https://api.telegram.org/bot<기존봇토큰>/setWebhook?url=https://<배포주소>/tg&secret_token=<TELEGRAM_SECRET>"
+```powershell
+# PowerShell 에서는 curl 이 Invoke-WebRequest 별칭이고 < > 가 리디렉션 기호라
+# 꺾쇠 자리표시자를 그대로 쓰면 명령이 깨진다. 변수로 먼저 담는다.
+$token  = "기존 봇 토큰"
+$worker = "https://bookmark-note.○○○.workers.dev"
+$secret = "TELEGRAM_SECRET"
+
+Invoke-RestMethod "https://api.telegram.org/bot$token/setWebhook?url=$worker/tg&secret_token=$secret"
 ```
 
 `{"ok":true}` 가 나오면 된다. 봇에 `/start` 를 보내 답이 오면 연결 성공.

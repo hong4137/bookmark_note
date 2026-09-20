@@ -20,4 +20,4 @@ ALLOWED_CHATS = "1406724324"
 # Apps Script 드라이브 어댑터의 /exec 주소
 DRIVE_ADAPTER_URL = "https://script.google.com/macros/s/AKfycbwAxI7pMSEKyaUl9Q79ZmYYKTpDssgSDbYs9exSPWrfkJF8m2WDRwoec_hIl9NesiIN/exec"
 # 배포된 Worker 주소 (봇 답장의 앱 링크에 쓴다)
-APP_URL = ""
+APP_URL = "https://bookmark-note.hong4137.workers.dev"
