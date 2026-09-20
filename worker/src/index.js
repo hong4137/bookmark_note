@@ -633,9 +633,9 @@ function buildReply(env, book, parsed, prev) {
   parsed.sentences.forEach((s, i) => lines.push((i + 1) + '. ' + esc(s)));
 
   if (prev) {
-    lines.push('', '⟩ ' + (prev.page ? prev.page + '쪽' : '앞 페이지') + ' 마지막 문장과 이어붙였습니다');
+    lines.push('', '↳ ' + (prev.page ? prev.page + '쪽' : '앞 페이지') + ' 마지막 문장과 이어붙였습니다');
   } else if (parsed.ends_mid_sentence) {
-    lines.push('', '⟩ 마지막 문장이 다음 페이지로 이어집니다');
+    lines.push('', '↳ 마지막 문장이 다음 페이지로 이어집니다');
   }
 
   if (env.APP_URL) lines.push('', '<a href="' + env.APP_URL + '">밑줄에서 열기</a>');
