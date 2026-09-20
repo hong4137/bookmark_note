@@ -276,6 +276,20 @@ function splitBook(raw) {
            : { book: String(raw).trim(), author: '' };
 }
 
+/**
+ * 이미 쌓아둔 책과 띄어쓰기만 다른 이름이면 그쪽 표기를 따른다.
+ *
+ * 사람 눈에 "AI 리터러시" 와 "AI리터러시" 는 같은 책이지만 저장은 따로 된다.
+ * v1 에서 옮겨온 두 쪽이 실제로 그렇게 갈라져 나왔다. 표지를 읽을 때마다
+ * Gemini 가 띄어쓰기를 다르게 줄 수도 있어서, 정할 때 한 번 맞춰 둔다.
+ */
+async function canonicalBook(env, name) {
+  const key = (s) => String(s).replace(/\s+/g, '').toLowerCase();
+  const rows = await env.DB.prepare('SELECT DISTINCT book FROM pages').all();
+  const hit = (rows.results || []).find((r) => key(r.book) === key(name));
+  return hit ? hit.book : name;
+}
+
 async function cmdBook(env, chatId, rest) {
   if (!rest) {
     const now = await getState(env, '현재_책');
@@ -284,7 +298,8 @@ async function cmdBook(env, chatId, rest) {
       : '아직 책을 정하지 않았습니다.\n<b>/책 데미안 - 헤르만 헤세</b> 처럼 보내주세요.');
   }
 
-  const { book, author } = splitBook(rest);
+  const { book: typed, author } = splitBook(rest);
+  const book = await canonicalBook(env, typed);
   await setState(env, '현재_책', book);
   const found = await lookupBook(env, book, book, author);
 
@@ -634,7 +649,7 @@ async function onPhoto(env, chatId, fileId, caption) {
  * 어차피 드라이브에 올려 뒀으니 버릴 이유가 없다.
  */
 async function onCover(env, chatId, parsed, photoId) {
-  const title = parsed.book_title.trim();
+  const title = await canonicalBook(env, parsed.book_title.trim());
   const author = (parsed.book_author || '').trim();
 
   await setState(env, '현재_책', title);
