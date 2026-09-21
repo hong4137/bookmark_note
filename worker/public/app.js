@@ -392,9 +392,18 @@ function showNotes() {
     box.append(chips);
   }
 
-  const shown = db.notes
-    .filter((n) => !noteFilter || n.book === noteFilter)
-    .sort((a, b) => (a.saved_at < b.saved_at ? 1 : -1));
+  const shown = db.notes.filter((n) => !noteFilter || n.book === noteFilter);
+
+  // 시간순으로만 늘어놓으면 두 책을 번갈아 읽었을 때 같은 제목이 여러 번
+  // 튀어나와 묶음이 되지 않는다. 책으로 먼저 묶고, 책끼리는 최근에 그은
+  // 밑줄이 있는 쪽을 위로 올린다.
+  const latest = {};
+  for (const n of shown) {
+    if (!latest[n.book] || latest[n.book] < n.saved_at) latest[n.book] = n.saved_at;
+  }
+  shown.sort((a, b) => (a.book === b.book
+    ? (a.saved_at < b.saved_at ? 1 : -1)
+    : (latest[a.book] < latest[b.book] ? 1 : -1)));
 
   // 책별로 묶어 보여준다 — v1에 없어서 아쉬웠던 부분
   let lastBook = null;
@@ -450,6 +459,40 @@ $('back').onclick = () => {
 $('tabBooks').onclick = () => showBooks();
 $('tabNotes').onclick = () => { noteFilter = null; showNotes(); };
 
+// ──────────────────────── 다시 받아오기 ────────────────────────
+
+/** 지금 보고 있는 화면을 그대로 다시 그린다 */
+function rerender() {
+  if (view.name === 'pages') return showPages(view.book);
+  if (view.name === 'page') return showPage(view.id);
+  if (view.name === 'notes') return showNotes();
+  return showBooks();
+}
+
+/**
+ * 봇으로 찍은 페이지는 서버에만 쌓인다. 앱은 열 때 한 번만 받아오므로
+ * 홈 화면에 띄워둔 채로 두면 새 페이지가 영영 보이지 않았다.
+ * 화면으로 돌아올 때마다 다시 받아온다 — 찍고 앱으로 넘어오는 것이
+ * 이 앱에서 가장 잦은 동작이다.
+ */
+let lastLoad = 0;
+
+async function refresh() {
+  if (!token || Date.now() - lastLoad < 15000) return;
+  try {
+    db = await api('/bootstrap');
+    lastLoad = Date.now();
+    rerender();
+  } catch (e) {
+    // 조용히 둔다. 보고 있던 화면이 오류로 바뀌면 그게 더 나쁘다.
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') refresh();
+});
+window.addEventListener('focus', refresh);
+
 // ──────────────────────── 시작 ────────────────────────
 
 async function boot() {
@@ -463,6 +506,7 @@ async function boot() {
 
   try {
     db = await api('/bootstrap');
+    lastLoad = Date.now();
     showBooks();
   } catch (err) {
     if (String(err.message) === 'UNAUTHORIZED') {

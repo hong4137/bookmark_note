@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "밑줄 화면 미리보기",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["worker/dev-preview.mjs"],
+      "port": 8788
+    }
+  ]
+}
