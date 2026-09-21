@@ -435,39 +435,76 @@ function startDrag(e, row) {
 
   const box = row.parentNode;
   const book = row.dataset.book;
-  const peers = () => [...box.querySelectorAll('.quote')].filter((q) => q.dataset.book === book);
-  const before = peers().map((q) => q.dataset.id).join();
+  const rows = [...box.querySelectorAll('.quote')].filter((q) => q.dataset.book === book);
+  const from = rows.indexOf(row);
+  if (rows.length < 2) return;
 
+  // 시작할 때의 자리를 문서 좌표로 재어 둔다. 끄는 동안 DOM 은 건드리지 않고
+  // 전부 transform 으로만 움직인다. 그래야 재는 값이 흔들리지 않는다.
+  const scroll0 = window.scrollY;
+  const at = rows.map((q) => {
+    const r = q.getBoundingClientRect();
+    return { top: r.top + scroll0, h: r.height };
+  });
+  const gap = at[1] ? at[1].top - (at[0].top + at[0].h) : 13;
+  const shift = at[from].h + gap;
+  const grabY = e.clientY + scroll0;
+
+  let to = from;
   const grip = e.currentTarget;
+  dragging = true;
   row.classList.add('dragging');
-  // 포인터를 손잡이에 묶어 둬야 빨리 움직여도 놓치지 않는다.
-  try { grip.setPointerCapture(e.pointerId); } catch (err) {}
+  try { grip.setPointerCapture(e.pointerId); } catch (err) {}   // 빨리 움직여도 놓치지 않게
 
   const onMove = (ev) => {
-    for (const other of peers()) {
-      if (other === row) continue;
-      const r = other.getBoundingClientRect();
-      const mid = r.top + r.height / 2;
-      const rowIsAfter = !!(other.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING);
-      if (ev.clientY < mid && rowIsAfter) { box.insertBefore(row, other); return; }
-      if (ev.clientY > mid && !rowIsAfter) { box.insertBefore(row, other.nextSibling); return; }
+    const dy = ev.clientY + window.scrollY - grabY;
+    row.style.setProperty('--dy', dy + 'px');   // 들어올린 카드는 손가락을 그대로 따라간다
+
+    // 어디에 놓일지는 카드 한가운데가 어느 카드들을 지나왔는지로 정한다.
+    // 한 번에 여러 칸을 건너뛰어도 그만큼 간다.
+    const mid = at[from].top + dy + at[from].h / 2;
+    to = from;
+    for (let k = 0; k < rows.length; k++) {
+      if (k === from) continue;
+      const c = at[k].top + at[k].h / 2;
+      if (k < from && mid < c) to = Math.min(to, k);
+      if (k > from && mid > c) to = Math.max(to, k);
     }
+
+    // 사이에 낀 카드들이 한 칸씩 비켜선다. 전환이 걸려 있어 미끄러지듯 움직인다.
+    for (let k = 0; k < rows.length; k++) {
+      if (k === from) continue;
+      const d = (from < to && k > from && k <= to) ? -shift
+        : (from > to && k >= to && k < from) ? shift : 0;
+      rows[k].style.setProperty('--dy', d + 'px');
+    }
+
+    // 목록 끝까지 끌 때 화면도 같이 따라간다
+    if (ev.clientY < 90) window.scrollBy(0, -14);
+    else if (ev.clientY > window.innerHeight - 90) window.scrollBy(0, 14);
   };
 
   const onUp = async () => {
     grip.removeEventListener('pointermove', onMove);
     grip.removeEventListener('pointerup', onUp);
     grip.removeEventListener('pointercancel', onUp);
+
+    dragging = false;
     row.classList.remove('dragging');
+    rows.forEach((q) => q.style.removeProperty('--dy'));
+    if (to === from) return;
 
-    const now = peers();
-    if (now.map((q) => q.dataset.id).join() === before) return;   // 제자리로 돌아왔다
+    // 눈에 보이던 자리 그대로 DOM 을 옮긴다. transform 은 방금 지웠으므로 튀지 않는다.
+    if (to > from) box.insertBefore(row, rows[to].nextSibling);
+    else box.insertBefore(row, rows[to]);
 
-    // 위아래 이웃 사이의 값을 준다. 옮기지 않은 밑줄은 건드리지 않는다.
+    const order = rows.filter((q) => q !== row);
+    order.splice(to, 0, row);
+
+    // 위아래 이웃 사이의 값을 준다. 옮기지 않은 밑줄의 자리는 건드리지 않는다.
     const posOf = (q) => (q ? (byNote(q.dataset.id).pos || 0) : null);
-    const i = now.indexOf(row);
-    const up = posOf(now[i - 1]);
-    const down = posOf(now[i + 1]);
+    const up = posOf(order[to - 1]);
+    const down = posOf(order[to + 1]);
     const pos = up == null && down == null ? 0
       : up == null ? down - 1000
       : down == null ? up + 1000
@@ -557,9 +594,11 @@ function rerender() {
  * 이 앱에서 가장 잦은 동작이다.
  */
 let lastLoad = 0;
+let dragging = false;
 
 async function refresh() {
-  if (!token || Date.now() - lastLoad < 15000) return;
+  // 끌고 있는 중에 다시 그리면 손에서 카드가 사라진다
+  if (dragging || !token || Date.now() - lastLoad < 15000) return;
   try {
     db = await api('/bootstrap');
     lastLoad = Date.now();

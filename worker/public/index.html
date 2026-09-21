@@ -211,9 +211,14 @@ main {
 .quote {
   background: var(--card); border: 2px solid var(--ink); border-radius: 16px;
   box-shadow: 4px 5px 0 var(--shadow); padding: 15px 16px; margin-bottom: 13px;
+  /* 기울기와 끌림을 한 transform 에 합친다. 따로 쓰면 뒤엣것이 앞엣것을 지운다 —
+     비켜서는 카드가 드래그 중에 반듯해지는 꼴을 본다. */
+  --rot: 0deg; --dy: 0px;
+  transform: translateY(var(--dy)) rotate(var(--rot));
+  transition: transform .18s cubic-bezier(.2, .7, .3, 1);
 }
-.quote:nth-of-type(odd)  { transform: rotate(-.5deg); }
-.quote:nth-of-type(even) { transform: rotate(.55deg); }
+.quote:nth-of-type(odd)  { --rot: -.5deg; }
+.quote:nth-of-type(even) { --rot: .55deg; }
 .quote .q { font-size: 15px; line-height: 1.88; word-break: keep-all; }
 .quote .src {
   display: flex; align-items: center; gap: 8px; margin-top: 12px;
@@ -231,9 +236,10 @@ main {
   cursor: grab; touch-action: none;
 }
 .quote .grip:active { cursor: grabbing; }
-/* 이 줄은 .quote:nth-of-type 뒤에 와야 기울기를 덮는다 */
+/* 들어올린 카드. 손가락을 1:1 로 따라가야 하므로 전환을 끈다 */
 .quote.dragging {
-  transform: none; box-shadow: 8px 10px 0 var(--shadow); opacity: .97;
+  --rot: 0deg; position: relative; z-index: 5; transition: none;
+  box-shadow: 10px 12px 0 var(--shadow); opacity: .98;
 }
 
 /* ── 빈 화면 · 뼈대 ───────────────────────────────────── */
