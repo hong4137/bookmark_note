@@ -401,8 +401,10 @@ function showNotes() {
   for (const n of shown) {
     if (!latest[n.book] || latest[n.book] < n.saved_at) latest[n.book] = n.saved_at;
   }
+  // 책 안에서는 pos 순서다. 기본값이 읽는 순서(쪽·문장 번호)라 처음에는
+  // 책을 읽는 차례대로 서고, 손으로 끌어 옮기면 그 자리가 유지된다.
   shown.sort((a, b) => (a.book === b.book
-    ? (a.saved_at < b.saved_at ? 1 : -1)
+    ? (a.pos || 0) - (b.pos || 0)
     : (latest[a.book] < latest[b.book] ? 1 : -1)));
 
   // 책별로 묶어 보여준다 — v1에 없어서 아쉬웠던 부분
@@ -419,11 +421,90 @@ function showNotes() {
   render(box);
 }
 
+const byNote = (id) => db.notes.find((n) => n.id === id);
+
+/**
+ * 밑줄 끌어 옮기기.
+ *
+ * 끌려가는 카드를 따로 띄우지 않고 목록 안에서 바로 옮겨 끼운다.
+ * 보이는 것이 곧 결과라 어디에 놓일지 헷갈릴 일이 없다.
+ * 자리는 같은 책 안에서만 바뀐다 — 책을 건너뛰면 쪽번호가 뒤엉킨다.
+ */
+function startDrag(e, row) {
+  e.preventDefault();
+
+  const box = row.parentNode;
+  const book = row.dataset.book;
+  const peers = () => [...box.querySelectorAll('.quote')].filter((q) => q.dataset.book === book);
+  const before = peers().map((q) => q.dataset.id).join();
+
+  const grip = e.currentTarget;
+  row.classList.add('dragging');
+  // 포인터를 손잡이에 묶어 둬야 빨리 움직여도 놓치지 않는다.
+  try { grip.setPointerCapture(e.pointerId); } catch (err) {}
+
+  const onMove = (ev) => {
+    for (const other of peers()) {
+      if (other === row) continue;
+      const r = other.getBoundingClientRect();
+      const mid = r.top + r.height / 2;
+      const rowIsAfter = !!(other.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING);
+      if (ev.clientY < mid && rowIsAfter) { box.insertBefore(row, other); return; }
+      if (ev.clientY > mid && !rowIsAfter) { box.insertBefore(row, other.nextSibling); return; }
+    }
+  };
+
+  const onUp = async () => {
+    grip.removeEventListener('pointermove', onMove);
+    grip.removeEventListener('pointerup', onUp);
+    grip.removeEventListener('pointercancel', onUp);
+    row.classList.remove('dragging');
+
+    const now = peers();
+    if (now.map((q) => q.dataset.id).join() === before) return;   // 제자리로 돌아왔다
+
+    // 위아래 이웃 사이의 값을 준다. 옮기지 않은 밑줄은 건드리지 않는다.
+    const posOf = (q) => (q ? (byNote(q.dataset.id).pos || 0) : null);
+    const i = now.indexOf(row);
+    const up = posOf(now[i - 1]);
+    const down = posOf(now[i + 1]);
+    const pos = up == null && down == null ? 0
+      : up == null ? down - 1000
+      : down == null ? up + 1000
+      : (up + down) / 2;
+
+    const note = byNote(row.dataset.id);
+    const old = note.pos;
+    note.pos = pos;                       // 화면은 이미 바뀌었다. 서버는 뒤따라온다.
+
+    try {
+      await api('/notes/move', { id: note.id, pos });
+    } catch (err) {
+      note.pos = old;
+      toast('자리를 옮기지 못했습니다');
+      showNotes();
+    }
+  };
+
+  grip.addEventListener('pointermove', onMove);
+  grip.addEventListener('pointerup', onUp);
+  grip.addEventListener('pointercancel', onUp);
+}
+
 function quoteRow(n) {
   const wrap = el('div', 'quote');
+  wrap.dataset.id = n.id;
+  wrap.dataset.book = n.book;
   wrap.append(el('div', 'q', n.text));
 
   const src = el('div', 'src');
+
+  // 끌어 옮기는 손잡이. 본문을 직접 끌게 하면 폰에서 스크롤과 다툰다.
+  const grip = el('button', 'grip', '⠿');
+  grip.title = '끌어서 자리 옮기기';
+  grip.onpointerdown = (e) => startDrag(e, wrap);
+  src.append(grip);
+
   src.append(el('span', 'grow', n.page ? n.page + '쪽' : '쪽번호 미상'));
 
   const go = el('button', 'txtbtn', '원문');

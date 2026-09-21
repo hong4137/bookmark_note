@@ -77,13 +77,19 @@ const db = {
     }
   ],
   notes: [
-    { id: 'n1', page_id: 'p1', book: 'AI 리터러시', page: 48, idx: 1,
+    { id: 'n1', page_id: 'p1', book: 'AI 리터러시', page: 48, idx: 1, pos: 48001,
       text: '도구는 어떻게 쓰느냐에 따라 사람을 키우기도 하고 사람을 갉아먹기도 하기 때문이다.',
       saved_at: '2026-09-19T01:31:00+09:00' },
-    { id: 'n2', page_id: 'p2', book: 'AI 리터러시', page: 59, idx: 1,
+    { id: 'n2', page_id: 'p2', book: 'AI 리터러시', page: 59, idx: 1, pos: 59001,
       text: '기계는 결코 누군가를 진심으로 이해하거나 아낄 수 없으며, 그런 척하도록 만든 기계를 그 자리에 놓는 것은 사람을 속이는 일이라고 그는 보았다.',
       saved_at: '2026-09-19T01:32:00+09:00' },
-    { id: 'n3', page_id: 'p3', book: '데미안', page: 121, idx: 0,
+    { id: 'n4', page_id: 'p2', book: 'AI 리터러시', page: 59, idx: 3, pos: 59003,
+      text: '당대에 AI를 가장 깊이 연구하던 사람이 AI에 가장 회의적인 목소리를 낸 것은 아이러니가 아니라 필연이었다.',
+      saved_at: '2026-09-19T01:33:00+09:00' },
+    { id: 'n5', page_id: 'p1', book: 'AI 리터러시', page: 48, idx: 4, pos: 48004,
+      text: '그러니 이 시대에 필요한 기술 중 하나는 무엇을 내 손에 쥐어야 하고 무엇을 AI에게 맡겨야 하며, AI에 일을 믿고 맡기려면 어떻게 해야 할지 아는 것이다.',
+      saved_at: '2026-09-19T01:34:00+09:00' },
+    { id: 'n3', page_id: 'p3', book: '데미안', page: 121, idx: 0, pos: 121000,
       text: '새는 알에서 나오려고 투쟁한다.',
       saved_at: '2026-09-19T01:31:30+09:00' }
   ]
@@ -109,12 +115,20 @@ createServer(async (req, res) => {
 
     if (path === '/api/bootstrap') return json(res, db);
 
+    if (path === '/api/notes/move') {
+      const n = db.notes.find((x) => x.id === body.id);
+      if (!n) return json(res, { error: 'not found' }, 404);
+      n.pos = body.pos;
+      return json(res, { id: n.id, pos: n.pos });
+    }
+
     if (path === '/api/notes/toggle') {
       const i = db.notes.findIndex((n) => n.page_id === body.page_id && n.idx === body.idx);
       if (i >= 0) { db.notes.splice(i, 1); return json(res, { on: false }); }
       const page = db.pages.find((p) => p.id === body.page_id);
       const note = { id: 'n' + Date.now(), page_id: body.page_id, book: page.book,
                      page: page.page, idx: body.idx, text: body.text,
+                     pos: (page.page == null ? 999999 : page.page) * 1000 + body.idx,
                      saved_at: new Date().toISOString() };
       db.notes.push(note);
       return json(res, { on: true, note });

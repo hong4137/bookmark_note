@@ -126,6 +126,7 @@ async function apiRoute(req, env, url) {
   try {
     if (path === '/bootstrap') return json(await bootstrap(env));
     if (path === '/notes/toggle') return json(await toggleNote(env, body));
+    if (path === '/notes/move') return json(await moveNote(env, body));
 
     const m = path.match(/^\/pages\/([^/]+)\/(sentence|stitch)$/);
     if (m) {
@@ -144,7 +145,7 @@ async function apiRoute(req, env, url) {
 async function bootstrap(env) {
   const [pages, notes, books] = await Promise.all([
     env.DB.prepare('SELECT * FROM pages ORDER BY shot_at').all(),
-    env.DB.prepare('SELECT * FROM notes ORDER BY saved_at').all(),
+    env.DB.prepare('SELECT * FROM notes ORDER BY pos, saved_at').all(),
     env.DB.prepare('SELECT book, title, author, publisher, cover_url FROM books').all()
   ]);
 
@@ -184,14 +185,34 @@ async function toggleNote(env, { page_id, idx, text }) {
   const note = {
     id: newId('n'),
     page_id, book: page.book, page: page.page,
-    idx, text, memo: null, saved_at: new Date().toISOString()
+    idx, text, memo: null, saved_at: new Date().toISOString(),
+    // 기본 자리는 읽는 순서다. 그은 순서로 쌓으면 같은 페이지의 문장이
+    // 거꾸로 서서 읽기가 불편하다. 손으로 끌어 옮기면 이 값이 덮어쓰인다.
+    pos: (page.page == null ? 999999 : page.page) * 1000 + idx
   };
 
   await env.DB.prepare(
-    'INSERT INTO notes (id, page_id, book, page, idx, text, memo, saved_at) VALUES (?,?,?,?,?,?,?,?)'
-  ).bind(note.id, note.page_id, note.book, note.page, note.idx, note.text, null, note.saved_at).run();
+    'INSERT INTO notes (id, page_id, book, page, idx, text, memo, saved_at, pos) VALUES (?,?,?,?,?,?,?,?,?)'
+  ).bind(note.id, note.page_id, note.book, note.page, note.idx, note.text, null,
+         note.saved_at, note.pos).run();
 
   return { on: true, note };
+}
+
+/**
+ * 밑줄을 끌어 옮긴 자리를 저장한다.
+ *
+ * 이웃 둘 사이의 값을 받아 그 하나만 고친다. 목록 전체를 다시 번호 매기면
+ * 쓰기가 많아지고, 옮기지 않은 밑줄의 자리까지 흔들린다.
+ */
+async function moveNote(env, { id, pos }) {
+  const n = Number(pos);
+  if (!Number.isFinite(n)) throw new Error('자리 값이 올바르지 않습니다.');
+
+  const r = await env.DB.prepare('UPDATE notes SET pos = ? WHERE id = ?').bind(n, id).run();
+  if (!r.meta || !r.meta.changes) throw new Error('밑줄을 찾을 수 없습니다.');
+
+  return { id, pos: n };
 }
 
 async function editSentence(env, pageId, { idx, text }) {
@@ -974,9 +995,10 @@ async function adminImport(req, env) {
   }
   for (const n of body.notes || []) {
     stmts.push(env.DB.prepare(
-      'INSERT OR REPLACE INTO notes (id, page_id, book, page, idx, text, memo, saved_at)' +
-      ' VALUES (?,?,?,?,?,?,?,?)'
-    ).bind(n.id, n.page_id, n.book, n.page ?? null, n.idx, n.text, null, n.saved_at));
+      'INSERT OR REPLACE INTO notes (id, page_id, book, page, idx, text, memo, saved_at, pos)' +
+      ' VALUES (?,?,?,?,?,?,?,?,?)'
+    ).bind(n.id, n.page_id, n.book, n.page ?? null, n.idx, n.text, null, n.saved_at,
+           (n.page == null ? 999999 : n.page) * 1000 + n.idx));
   }
 
   if (stmts.length) await env.DB.batch(stmts);

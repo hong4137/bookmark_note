@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS notes (
   text      TEXT NOT NULL,
   memo      TEXT,
   saved_at  TEXT NOT NULL,
+  pos       REAL,               -- 밑줄 목록에서의 자리. 기본은 읽는 순서(쪽*1000+문장번호),
+                                -- 손으로 끌어 옮기면 이웃 사이의 값이 들어간다
+
   UNIQUE(page_id, idx)
 );
 CREATE INDEX IF NOT EXISTS idx_notes_book ON notes(book, saved_at);

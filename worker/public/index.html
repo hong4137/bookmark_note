@@ -221,6 +221,21 @@ main {
 }
 .quote .src .grow { flex: 1; }
 
+/* 끌어 옮기는 손잡이. touch-action:none 이라야 폰에서 스크롤과 다투지 않는다 */
+.quote .grip {
+  border: 0; background: none;
+  /* 글리프는 작아도 잡는 자리는 손가락만 해야 한다.
+     안쪽 여백으로 넓히고 바깥 여백으로 되돌려, 줄 높이는 그대로 둔다. */
+  padding: 11px 13px 11px 3px; margin: -11px 0 -11px -5px;
+  font-size: 16px; line-height: 1; color: var(--faint);
+  cursor: grab; touch-action: none;
+}
+.quote .grip:active { cursor: grabbing; }
+/* 이 줄은 .quote:nth-of-type 뒤에 와야 기울기를 덮는다 */
+.quote.dragging {
+  transform: none; box-shadow: 8px 10px 0 var(--shadow); opacity: .97;
+}
+
 /* ── 빈 화면 · 뼈대 ───────────────────────────────────── */
 .empty {
   text-align: center; color: var(--faint); font-weight: 600;
