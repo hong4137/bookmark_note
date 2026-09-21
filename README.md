@@ -117,20 +117,24 @@ npx wrangler deploy
 텔레그램은 봇 하나에 웹훅과 `getUpdates` 를 동시에 허용하지 않는다.
 안 끄면 둘이 메시지를 뺏는다.
 
-그 다음 같은 봇의 수신처만 Worker 로 바꾼다.
+그 다음 **Worker 에게 스스로 등록하라고 시킨다.**
 
 ```powershell
-# PowerShell 에서는 curl 이 Invoke-WebRequest 별칭이고 < > 가 리디렉션 기호라
-# 꺾쇠 자리표시자를 그대로 쓰면 명령이 깨진다. 변수로 먼저 담는다.
-$token  = "기존 봇 토큰"
-$worker = "https://bookmark-note.○○○.workers.dev"
-$secret = "TELEGRAM_SECRET"
-
-Invoke-RestMethod "https://api.telegram.org/bot$token/setWebhook?url=$worker/tg&secret_token=$secret"
+$admin = "ADMIN_SECRET 에 넣은 값"
+Invoke-RestMethod -Method Post -Uri "https://bookmark-note.○○○.workers.dev/admin/webhook" `
+  -ContentType "application/json" -Body (@{ secret = $admin } | ConvertTo-Json)
 ```
 
-`{"ok":true}` 가 나오면 된다. 봇에 `/start` 를 보내 답이 오면 연결 성공.
+`"ok": true` 가 나오면 된다. 봇에 `/start` 를 보내 답이 오면 연결 성공.
 **봇 주소도 대화 내용도 그대로다.** 뒤에서 일하는 쪽만 바뀐 것이다.
+
+> 손으로 `setWebhook` 을 부르지 않는다. `secret_token` 과 Worker 의
+> `TELEGRAM_SECRET` 이 **같은 값이어야 하는데**, 양쪽에 따로 적다 보면 어긋난다.
+> 어긋나면 Worker 가 401 을 돌려주고 텔레그램은 전달을 포기하는데,
+> **봇은 아무 말도 하지 않는다.** 고장 난 티가 안 나서 찾기가 고약하다.
+> 실제로 한 번 이렇게 멈췄다. 그래서 등록은 Worker 가 자기 손으로 한다.
+>
+> 여섯 시간마다 크론이 같은 점검을 돌려, 끊어져 있으면 스스로 다시 건다.
 
 ### 6. v1 데이터 옮기기 (v1을 쓰고 있었다면)
 
@@ -202,7 +206,7 @@ npx wrangler d1 execute booknote --local \
 
 | 증상 | 확인 |
 |---|---|
-| 봇이 무응답 | `npx wrangler tail` 로 실시간 로그. 웹훅은 `getWebhookInfo` 로 |
+| 봇이 무응답 | `getWebhookInfo` 의 `last_error_message` 부터 본다. `401 Unauthorized` 면 시크릿이 어긋난 것 — `/admin/webhook` 을 불러 다시 걸게 한다. 그 밖에는 `npx wrangler tail` |
 | "지정된 사용자만" | `ALLOWED_CHATS` 에 내 챗 ID가 있는지 |
 | 앱이 "권한 없음" | 봇에 `/앱` 으로 새 링크 |
 | 사진이 안 뜸 | 어댑터 `/exec` 를 브라우저로 열어 살아있는지. `DRIVE_SECRET` 양쪽 일치 |
