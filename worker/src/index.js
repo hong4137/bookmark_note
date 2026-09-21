@@ -262,17 +262,41 @@ function telegramHook(req, env, ctx) {
   });
 }
 
-const tg = (env, method, payload) =>
-  fetch('https://api.telegram.org/bot' + env.TELEGRAM_BOT_TOKEN + '/' + method, {
+const tg = async (env, method, payload) => {
+  const res = await fetch('https://api.telegram.org/bot' + env.TELEGRAM_BOT_TOKEN + '/' + method, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload)
-  }).then((r) => r.json());
+  });
 
-const reply = (env, chatId, html) =>
-  tg(env, 'sendMessage', {
+  const data = await res.json().catch(() => ({ ok: false, description: 'JSON 이 아닌 응답' }));
+
+  // 실패해도 예외가 아니라 {ok:false} 로 온다. 그냥 두면 답장이 사라져도
+  // 아무 데도 남지 않는다. 최소한 로그에는 남겨야 tail 로 찾을 수 있다.
+  if (!data.ok) console.error('텔레그램 ' + method + ' 실패: ' + JSON.stringify(data));
+
+  return data;
+};
+
+/**
+ * 텔레그램이 태그를 거절하면 태그를 떼고 한 번 더 보낸다.
+ *
+ * 책 문장에 < 나 & 가 섞여 들어오면 HTML 파싱이 400 으로 떨어지는데,
+ * 그러면 답장이 통째로 사라져 봇이 먹통으로 보인다.
+ * 모양이 깨지더라도 내용은 도착하는 편이 낫다.
+ */
+const reply = async (env, chatId, html) => {
+  const out = await tg(env, 'sendMessage', {
     chat_id: chatId, text: html, parse_mode: 'HTML', disable_web_page_preview: true
   });
+  if (out.ok) return out;
+
+  return tg(env, 'sendMessage', {
+    chat_id: chatId,
+    text: String(html).replace(/<[^>]+>/g, ''),
+    disable_web_page_preview: true
+  });
+};
 
 async function handleUpdate(update, env) {
   const msg = update.message || update.channel_post;
