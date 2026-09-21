@@ -89,9 +89,17 @@ function printStorageLinks_() {
  */
 function step3_트리거_설치() {
   const before = tg_('getWebhookInfo', {});
+
+  // v2(Cloudflare Worker)로 옮긴 뒤에는 이 함수를 쓰면 안 된다.
+  // 웹훅을 지우고 폴링을 켜 버려서 봇이 통째로 v1 으로 되돌아간다.
+  // 그러면 답장은 멀쩡히 오는데 저장은 시트로 가고 밑줄 앱에는 아무것도
+  // 안 뜬다. 조용히 망가지는 모양이라 알아채기가 어렵다. 실제로 한 번 겪었다.
   if (before.url) {
-    tg_('deleteWebhook', { drop_pending_updates: false });
-    console.log('기존 웹훅 해제. 밀려 있던 메시지 ' + (before.pending_update_count || 0) + '건은 그대로 받습니다.');
+    throw new Error(
+      '웹훅이 이미 걸려 있습니다: ' + before.url + '\n' +
+      'v2(Worker)가 이 봇을 받고 있다는 뜻입니다. 이 함수를 실행하면 v1 폴링으로\n' +
+      '되돌아가서, 답장은 오지만 저장은 시트로 가고 앱에는 아무것도 안 뜹니다.\n' +
+      '정말로 v1 으로 되돌릴 작정이면 이 검사를 지우고 실행하세요.');
   }
 
   ScriptApp.getProjectTriggers().forEach(function (t) {
