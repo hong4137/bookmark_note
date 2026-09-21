@@ -26,3 +26,7 @@ APP_URL = "https://bookmark-note.hong4137.workers.dev"
 # 한도가 여전히 모자라면 gemini-3.1-flash-lite, 은퇴로 끊기는 게 싫으면
 # gemini-flash-lite-latest. 목록은 봇에 /모델 을 보내면 나온다.
 GEMINI_MODEL = "gemini-3.5-flash-lite"
+
+# 웹훅이 조용히 끊어져도 스스로 다시 걸도록 여섯 시간마다 점검한다.
+[triggers]
+crons = ["17 */6 * * *"]

@@ -38,14 +38,70 @@ export default {
       if (url.pathname === '/tg' && req.method === 'POST') return telegramHook(req, env, ctx);
       if (url.pathname.startsWith('/api/')) return apiRoute(req, env, url);
       if (url.pathname === '/admin/import' && req.method === 'POST') return adminImport(req, env);
+      if (url.pathname === '/admin/webhook' && req.method === 'POST') return adminWebhook(req, env);
     } catch (err) {
       console.error(err.stack || String(err));
       return json({ error: String(err.message || err) }, 500);
     }
 
     return env.ASSETS.fetch(req);   // 나머지는 앱 화면
+  },
+
+  // 웹훅은 텔레그램 쪽에 등록돼 있어서 Worker 밖에서 조용히 망가질 수 있다.
+  // 주기적으로 들여다보고 어긋나 있으면 스스로 다시 건다.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(ensureWebhook(env, false)
+      .then((r) => console.log('웹훅 점검: ' + JSON.stringify(r)))
+      .catch((err) => console.error(err.stack || String(err))));
   }
 };
+
+/**
+ * 웹훅이 이 Worker 를 제대로 가리키고 있는지 보고, 아니면 다시 건다.
+ *
+ * setWebhook 의 secret_token 과 Worker 의 TELEGRAM_SECRET 은 같은 값이어야
+ * 하는데, 사람이 양쪽에 따로 적다 보면 어긋난다. 어긋나면 Worker 가 401 을
+ * 돌려주고 봇은 아무 말도 하지 않는다 — 고장 난 티가 안 나는 고장이다.
+ * 실제로 한 번 이렇게 멈췄다.
+ *
+ * 그래서 등록도 Worker 가 자기 손으로 한다. 사람이 값을 두 번 적을 일이
+ * 없으면 어긋날 일도 없다.
+ */
+async function ensureWebhook(env, force) {
+  if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_SECRET || !env.APP_URL) {
+    return { ok: false, error: 'TELEGRAM_BOT_TOKEN · TELEGRAM_SECRET · APP_URL 이 모두 있어야 합니다.' };
+  }
+
+  const want = String(env.APP_URL).replace(/\/$/, '') + '/tg';
+  const info = (await tg(env, 'getWebhookInfo', {})).result || {};
+
+  // 지난 오류 기록은 오래 남는다. 지금도 실패하고 있는지만 본다.
+  const failingNow = info.last_error_date &&
+    (Date.now() / 1000 - info.last_error_date) < 15 * 60;
+
+  if (info.url === want && !failingNow && !force) {
+    return { ok: true, url: info.url, repaired: false, pending: info.pending_update_count || 0 };
+  }
+
+  const set = await tg(env, 'setWebhook', {
+    url: want, secret_token: env.TELEGRAM_SECRET, drop_pending_updates: false
+  });
+
+  return {
+    ok: !!set.ok, url: want, repaired: true, set,
+    before: { url: info.url || '', last_error_message: info.last_error_message || '' }
+  };
+}
+
+/** 위 점검을 손으로 부르는 창구. 본문으로만 받는다 — 주소창에 암호를 남기지 않기 위해서다. */
+async function adminWebhook(req, env) {
+  if (!env.ADMIN_SECRET) return json({ error: 'disabled' }, 404);
+
+  const body = await req.json().catch(() => ({}));
+  if (body.secret !== env.ADMIN_SECRET) return json({ error: 'unauthorized' }, 401);
+
+  return json(await ensureWebhook(env, body.force === true));
+}
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), {
